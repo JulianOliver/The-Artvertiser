@@ -55,6 +55,7 @@ class affine_image_generator : public example_generator
   void set_noise_level(int p_noise_level);
   //! Default = 3
   void set_level_number(int p_level_number);
+  int get_level_number() { return level_number; }
   //! Default = 32
   void set_patch_size(int p_patch_size);
   //! Default = false;
@@ -81,6 +82,7 @@ class affine_image_generator : public example_generator
 
   void set_gaussian_smoothing_kernel_size(int p_gaussian_smoothing_kernel_size)
   { gaussian_smoothing_kernel_size = p_gaussian_smoothing_kernel_size; }
+  int get_gaussian_smoothing_kernel_size( ) { return gaussian_smoothing_kernel_size; }
 
   void generate_random_affine_transformation(void);
   void generate_Id_affine_transformation(void);

@@ -39,9 +39,9 @@ planar_object_recognizer::planar_object_recognizer()
 {
   forest = 0;
   model_points = 0;
-  object_input_view = 0;
+//  object_input_view = 0;
   model_and_input_images = 0;
-  point_detector = 0;
+  //point_detector = 0;
   homography_estimator=0;
 
   for(int i = 0; i < hard_max_detected_pts; i++)
@@ -137,7 +137,7 @@ void planar_object_recognizer::set_noise_level(int noise_level)
 /*! Build a classifier from the given model image. The result is not saved.
   \return true on success, false on failure.
   */
-bool planar_object_recognizer::build(IplImage *model_image,
+bool planar_object_recognizer::build(pyr_yape** point_detector_ptr, IplImage *model_image,
                                                 int max_point_number_on_model, int patch_size,
                                                 int yape_radius, int tree_number, int nbLev,
                                                 LEARNPROGRESSION LearnProgress, int *roi)
@@ -171,13 +171,13 @@ bool planar_object_recognizer::build(IplImage *model_image,
 
   initialize();
 
-  learn(max_point_number_on_model, patch_size, yape_radius, tree_number, nbLev, LearnProgress);
+  learn( point_detector_ptr, max_point_number_on_model, patch_size, yape_radius, tree_number, nbLev, LearnProgress);
 
   return true;
 }
 
 
-bool planar_object_recognizer::build_with_cache(string filename,
+bool planar_object_recognizer::build_with_cache(string filename, pyr_yape** point_detector_ptr,
                                                 int max_point_number_on_model, int patch_size,
                                                 int yape_radius, int tree_number, int nbLev,
                                                 LEARNPROGRESSION LearnProgress)
@@ -203,7 +203,7 @@ bool planar_object_recognizer::build_with_cache(string filename,
 
   IplImage * model = mcvLoadImage(filename.data(), 0);
 
-  if (load(dirname) and model)
+  if (load(dirname, point_detector_ptr) and model)
   {
      new_images_generator.set_original_image(model, u[0], v[0], u[1], v[1], u[2], v[2], u[3], v[3]);
 	 return true;
@@ -217,24 +217,24 @@ bool planar_object_recognizer::build_with_cache(string filename,
 
   initialize();
 
-  learn(max_point_number_on_model, patch_size, yape_radius, tree_number, nbLev, LearnProgress);
+  learn(point_detector_ptr, max_point_number_on_model, patch_size, yape_radius, tree_number, nbLev, LearnProgress);
 
-  save(dirname);
+  save(dirname, *point_detector_ptr);
 
   return true;
 }
 
-planar_object_recognizer::planar_object_recognizer(string directory_name)
+planar_object_recognizer::planar_object_recognizer(string directory_name, pyr_yape **point_detector_ptr)
 {
   forest = 0;
   model_points = 0;
   for(int i = 0; i < hard_max_detected_pts; i++)
     match_probabilities[i] =0;
 
-  load(directory_name);
+  load(directory_name, point_detector_ptr);
 }
 
-bool planar_object_recognizer::load(string directory_name)
+bool planar_object_recognizer::load(string directory_name, pyr_yape** point_detector_ptr )
 {
   // Read parameters:
   char parameter_filename[1000];
@@ -310,8 +310,10 @@ bool planar_object_recognizer::load(string directory_name)
     match_probabilities[i] = new float[model_point_number];
   }
 
-  point_detector = new pyr_yape(new_images_generator.original_image->width, new_images_generator.original_image->height, nbLev);
-  point_detector->set_radius(yape_radius);
+  assert( *point_detector_ptr == NULL && "must not already have point detector" );
+  printf("planar_object_recognizer::load constructing yape: nbLev %i, radius %i\n", nbLev, yape_radius );
+  *point_detector_ptr = new pyr_yape(new_images_generator.original_image->width, new_images_generator.original_image->height, nbLev);
+  (*point_detector_ptr)->set_radius(yape_radius);
 
   initialize();
 
@@ -320,9 +322,9 @@ bool planar_object_recognizer::load(string directory_name)
 
 void planar_object_recognizer::initialize(void)
 {
-  object_input_view = new object_view(new_images_generator.original_image->width,
+/*  object_input_view = new object_view(new_images_generator.original_image->width,
                                       new_images_generator.original_image->height,
-                                      new_images_generator.level_number);
+                                      new_images_generator.level_number);*/
 
   // For motion_estimation:
   affine_motion = new affinity();
@@ -355,8 +357,8 @@ planar_object_recognizer::~planar_object_recognizer(void)
       delete shared_barrier;
   }
 
-  if (object_input_view)   delete object_input_view;
-  if (point_detector)      delete point_detector;
+//  if (object_input_view)   delete object_input_view;
+//  if (point_detector)      delete point_detector;
 
   if (model_points != 0)
     delete [] model_points;
@@ -369,23 +371,23 @@ planar_object_recognizer::~planar_object_recognizer(void)
       delete [] match_probabilities[i];
   }
 
-  if (detected_points) delete[] detected_points;
+//  if (detected_points) delete[] detected_points;
   if (detected_point_views) delete[] detected_point_views;
   if (affine_motion) delete affine_motion;
   if (H) delete H;
   if (homography_estimator) delete homography_estimator;
 }
 
-void planar_object_recognizer::learn(int max_point_number_on_model, int patch_size,
+void planar_object_recognizer::learn( pyr_yape** point_detector_ptr, int max_point_number_on_model, int patch_size,
                                      int yape_radius, int tree_number, int nbLev,
-                                     LEARNPROGRESSION LearnProgress)
+                                     LEARNPROGRESSION LearnProgress )
 {
-  if (point_detector) delete point_detector;
-  point_detector = new pyr_yape(new_images_generator.original_image->width, new_images_generator.original_image->height, nbLev);
-  point_detector->set_radius(yape_radius);
-  point_detector->set_use_bins(use_bins_for_model_points);
+  if (*point_detector_ptr) delete *point_detector_ptr;
+  *point_detector_ptr = new pyr_yape(new_images_generator.original_image->width, new_images_generator.original_image->height, nbLev);
+  (*point_detector_ptr)->set_radius(yape_radius);
+  (*point_detector_ptr)->set_use_bins(use_bins_for_model_points);
 
-  detect_most_stable_model_points(max_point_number_on_model, patch_size, views_number, min_view_rate, LearnProgress);
+  detect_most_stable_model_points(*point_detector_ptr, max_point_number_on_model, patch_size, views_number, min_view_rate, LearnProgress);
 
   save_image_of_model_points(patch_size);
 
@@ -406,7 +408,7 @@ void planar_object_recognizer::learn(int max_point_number_on_model, int patch_si
 
 }
 
-void planar_object_recognizer::save(string directory_name)
+void planar_object_recognizer::save(string directory_name, pyr_yape* point_detector )
 {
 #ifndef WIN32
   mkdir(directory_name.data(), S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IWOTH);
@@ -449,6 +451,8 @@ void planar_object_recognizer::save(string directory_name)
 
 void planar_object_recognizer::detect_points(IplImage * input_image)
 {
+    assert( false && "this happens in a thread now" );
+    /*
   check_target_size(input_image);
   point_detector->set_use_bins(use_bins_for_input_image);
   point_detector->set_tau(point_detector_tau);
@@ -456,10 +460,10 @@ void planar_object_recognizer::detect_points(IplImage * input_image)
   detected_point_number = point_detector->pyramidBlurDetect(input_image,
                                                             detected_points, max_detected_pts,
                                                             &object_input_view->image);
-  //printf("found %i points\n", detected_point_number );
+  //printf("found %i points\n", detected_point_number );*/
 }
 
-void planar_object_recognizer::preprocess_points(void)
+void planar_object_recognizer::preprocess_points(object_view* object_input_view)
 {
   int patch_size = forest->image_width;
 
@@ -479,13 +483,13 @@ void planar_object_recognizer::preprocess_points(void)
     {
       new_images_generator.preprocess_point_view(pv, object_input_view);
 
-      //if (0) mcvSaveImage("patches/detected_%03d_corrected.bmp", i, pv->preprocessed);
+      //if (1) mcvSaveImage("patches/detected_%03d_corrected.bmp", i, pv->preprocessed);
     }
   }
   PROFILE_SECTION_POP();
 }
 
-void planar_object_recognizer::match_points(bool fill_match_struct)
+void planar_object_recognizer::match_points(object_view* object_input_view, bool fill_match_struct)
 {
   match_number = 0;
 
@@ -526,19 +530,30 @@ void planar_object_recognizer::match_points(bool fill_match_struct)
   }
 }
 
-bool planar_object_recognizer::detect(IplImage * input_image)
+bool planar_object_recognizer::detect(IplImage * input_image )
+{
+    assert( false && "we don't do this any more" );
+}
+
+bool planar_object_recognizer::detect( IplImage* input_image, keypoint* _keypoints, int _num_keypoints, object_view* object_input_view )
 {
     get_ui_settings();
 
-    PROFILE_SECTION_PUSH("detect points");
+    detected_points = _keypoints;
+    detected_point_number = _num_keypoints;
+
+    check_target_size(input_image);
+
+    /*PROFILE_SECTION_PUSH("detect points");
     detect_points(input_image);
-    PROFILE_SECTION_POP();
+    PROFILE_SECTION_POP();*/
+
     PROFILE_SECTION_PUSH("preprocess points");
-    preprocess_points();
+    preprocess_points( object_input_view );
     PROFILE_SECTION_POP();
 
     PROFILE_SECTION_PUSH("match points");
-    match_points();
+    match_points( object_input_view);
     PROFILE_SECTION_POP();
 
     object_is_detected = false;
@@ -1355,7 +1370,7 @@ bool cmp_tmp_model_points(pair<object_keypoint, int> p1, pair<object_keypoint, i
 }
 
 // Selection of the interest points from the image model
-void planar_object_recognizer::detect_most_stable_model_points(int max_point_number_on_model,
+void planar_object_recognizer::detect_most_stable_model_points(pyr_yape* point_detector, int max_point_number_on_model,
                                                                int patch_size,
                                                                int view_nb, double min_view_rate,
                                                                LEARNPROGRESSION LearnProgress)
@@ -1597,7 +1612,7 @@ void planar_object_recognizer::draw_model(void)
   cvLine(model_and_input_images, C4, C1, col, 2);
 }
 
-void planar_object_recognizer::save_one_image_per_match_input_to_model(IplImage * input_image, const char * matches_dir)
+void planar_object_recognizer::save_one_image_per_match_input_to_model(IplImage * input_image, const char * matches_dir, object_view* object_input_view)
 {
   int patch_size = forest->image_width;
 
@@ -1663,7 +1678,7 @@ void planar_object_recognizer::save_one_image_per_match_input_to_model(IplImage 
   }
 }
 
-void planar_object_recognizer::save_one_image_per_match_model_to_input(IplImage * input_image, const char * matches_dir)
+void planar_object_recognizer::save_one_image_per_match_model_to_input(IplImage * input_image, const char * matches_dir, object_view* object_input_view)
 {
   int patch_size = forest->image_width;
 
@@ -1862,19 +1877,29 @@ void planar_object_recognizer::draw_inlier_matches(int line_width)
 /*! Ensures that allocated resources are ready to handle an image of the given
  * size.
  */
-void planar_object_recognizer::check_target_size(IplImage *image)
+void planar_object_recognizer::check_target_size(IplImage *image /*, pyr_yape** point_detector_ptr*/)
 {
 	int w = image->width;
 	int h = image->height;
 	int nbLev = new_images_generator.level_number;
 
+    /*
 	if (object_input_view->image[0]->width == w &&
 			object_input_view->image[0]->height ==h)
 		// Nothing to do: allocated resources have the right size
 		return;
-
+*/
 	//int u[4] = {-1, -1, -1, -1};
 	//int v[4] = {-1, -1, -1, -1};
+
+    if ( new_images_generator.orientation_corrector->getWidth() == w &&
+        new_images_generator.orientation_corrector->getHeight() == h )
+        // Nothing to do: allocated resources have the right size
+        return;
+
+    assert( false && "sizes don't match");
+    /*
+	fprintf(stderr,"*** PERFORMANCE WARNING: check_target_size is reallocated objects\n");
 
 	if (new_images_generator.orientation_corrector != 0)
 		delete new_images_generator.orientation_corrector;
@@ -1883,10 +1908,10 @@ void planar_object_recognizer::check_target_size(IplImage *image)
 
 	delete object_input_view;
 	object_input_view = new object_view(w,h,nbLev);
-	int yape_radius = point_detector->get_radius();
-	delete point_detector;
-	point_detector = new pyr_yape(w,h,nbLev);
-	point_detector->set_radius(yape_radius);
+	int yape_radius = (*point_detector_ptr)->get_radius();
+	delete *point_detector_ptr;
+	*point_detector_ptr = new pyr_yape(w,h,nbLev);
+	(*point_detector_ptr)->set_radius(yape_radius);*/
 }
 
 void planar_object_recognizer::get_ui_settings()

@@ -16,7 +16,7 @@ public:
 	CalibModel(const char *modelfile = "model.bmp");
 	~CalibModel();
 
-	bool buildCached(int nbcam, CvCapture *capture, bool cache, planar_object_recognizer &detector);
+	bool buildCached(int nbcam, CvCapture *capture, bool cache, planar_object_recognizer &detector );
 
 private:
 	const char *win;

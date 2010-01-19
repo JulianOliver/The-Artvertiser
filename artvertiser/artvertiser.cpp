@@ -354,17 +354,17 @@ static void usage(const char *s)
 void exit_handler()
 {
     printf("in exit_handler\n");
-    // shutdown capture
-    if ( multi )
-    {
-        printf("stopping multithread capture\n");
-        multi->cams[0]->shutdownMultiThreadCapture();
-    }
     // shutdown detection thread
     if ( detection_thread_running )
     {
         printf("stopping detection\n");
         shutdownDetectionThread();
+    }
+    // shutdown capture
+    if ( multi )
+    {
+        printf("stopping multithread capture\n");
+        multi->cams[0]->shutdownMultiThreadCapture();
     }
     // shutdown the capture
     if ( multi )
@@ -756,17 +756,17 @@ static bool drawBackground(IplTexture *tex)
 /*! \brief Draw all the points
  *
  */
-static void drawDetectedPoints(void)
+static void drawDetectedPoints( int width, int height, keypoint* keypoints, int num_keypoints )
 {
     if (!multi) return;
 
-    IplImage *im = multi->cams[current_cam]->getLastProcessedFrame();
-    planar_object_recognizer &detector(multi->cams[current_cam]->detector);
-    if (!im) return;
+    //IplImage *im = multi->cams[current_cam]->getLastProcessedFrame();
+    //planar_object_recognizer &detector(multi->cams[current_cam]->detector);
+    //if (!im) return;
 
     glMatrixMode(GL_PROJECTION);
     glLoadIdentity();
-    glOrtho(0, im->width-1, im->height-1, 0, -1, 1);
+    glOrtho(0, width-1, height-1, 0, -1, 1);
 
     glMatrixMode(GL_MODELVIEW);
     glLoadIdentity();
@@ -780,16 +780,16 @@ static void drawDetectedPoints(void)
     glBegin(GL_POINTS);
     // draw all detected points
     glColor4f(0,1,0,1);
-    for ( int i=0; i<detector.detected_point_number; ++i)
+    for ( int i=0; i<num_keypoints; ++i)
     {
-        keypoint& kp = detector.detected_points[i];
+        keypoint& kp = keypoints[i];
         int s = kp.scale;
         float x =PyrImage::convCoordf(kp.u, s, 0);
         float y =PyrImage::convCoordf(kp.v, s, 0);
         glVertex2f(x,y);
     }
     // draw matching points red
-    if ( detector.object_is_detected )
+    /*if ( detector.object_is_detected )
     {
         glColor4f( 1, 0, 0, 1 );
         for (int i=0; i<detector.match_number; ++i)
@@ -803,7 +803,7 @@ static void drawDetectedPoints(void)
                 glVertex2f(x,y);
             }
         }
-    }
+    }*/
     glEnd();
 
     glutSwapBuffers();
@@ -901,7 +901,7 @@ static void geomCalibIdle(void)
 
     if(!raw_frame_texture) raw_frame_texture = new IplTexture;
     IplImage* raw_frame = raw_frame_texture->getImage();
-    multi->cams[current_cam]->getLastRawFrame( &raw_frame );
+    multi->cams[current_cam]->getCopyOfLastFrame( &raw_frame );
     raw_frame_texture->setImage(raw_frame);
     //raw_frame_texture->setImage(multi->cams[current_cam]->frame);
 
@@ -1283,6 +1283,7 @@ static void drawAugmentation()
  */
 static void draw(void)
 {
+    PROFILE_THIS_BLOCK("draw loop");
 
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glDisable(GL_LIGHTING);
@@ -1298,6 +1299,22 @@ static void draw(void)
 
     if (!multi)
         return;
+
+    if(!raw_frame_texture) raw_frame_texture = new IplTexture;
+    IplImage* raw_frame = NULL;
+
+    keypoint* keypoints;
+    int num_keypoints;
+
+    PROFILE_SECTION_PUSH("get last draw");
+    multi->cams[current_cam]->getLastDrawFrame( &raw_frame, &raw_frame_timestamp, &keypoints, &num_keypoints );
+    PROFILE_SECTION_POP();
+    //printf(". getLastRawFrame gave us %f\n", raw_frame_timestamp.ToSeconds() );
+    raw_frame_texture->setImage(raw_frame);
+    /*raw_frame_texture->setImage(multi->cams[current_cam]->frame);
+    frameTimestamp = multi->cams[current_cam]->frame_timestamp;*/
+
+
 
     int now = glutGet(GLUT_ELAPSED_TIME);
     /* elapsed time
@@ -1352,7 +1369,7 @@ static void draw(void)
     {
         //printf("draw status\n");
 
-        drawDetectedPoints();
+        drawDetectedPoints( raw_frame->width, raw_frame->height, keypoints, num_keypoints );
 
         // not using exactly as defined in framerate.h because it's stupid
         frameEnd(1.0f, 0.2f, 0.2f, 0.8, 0.95 );
@@ -1415,16 +1432,21 @@ static void* detectionThreadFunc( void* _data )
 
     while ( !detection_thread_should_exit )
     {
-        PROFILE_THIS_BLOCK("detection_thread");
+        usleep( 100*1000 );
+
+        PROFILE_SECTION_PUSH("detection_thread");
 
         if ( !multi->cams[0]->detect() )
         {
-            usleep( 10000 );
+            PROFILE_SECTION_POP();
             continue;
         }
 
         if ( detection_thread_should_exit )
+        {
+            PROFILE_SECTION_POP();
             break;
+        }
 
         frame_ok=false;
 
@@ -1454,6 +1476,8 @@ static void* detectionThreadFunc( void* _data )
             cvReleaseMat(&mat);
 
         }
+
+        PROFILE_SECTION_POP();
     }
 
     printf("detection thread exiting\n");
@@ -1471,20 +1495,13 @@ static void idle()
     PROFILE_SECTION_PUSH( "idle loop" );
 
     // acquire images
+    PROFILE_SECTION_PUSH("grabFrames");
     multi->grabFrames();
+    PROFILE_SECTION_POP();
 
     // detect the calibration object in every image
     // (this loop could be paralelized)
     int nbdet=1;
-
-
-    if(!raw_frame_texture) raw_frame_texture = new IplTexture;
-    IplImage* raw_frame = raw_frame_texture->getImage();
-    multi->cams[current_cam]->getLastRawFrame( &raw_frame, &raw_frame_timestamp );
-    //printf(". getLastRawFrame gave us %f\n", raw_frame_timestamp.ToSeconds() );
-    raw_frame_texture->setImage(raw_frame);
-    /*raw_frame_texture->setImage(multi->cams[current_cam]->frame);
-    frameTimestamp = multi->cams[current_cam]->frame_timestamp;*/
 
 
     //doDetection();

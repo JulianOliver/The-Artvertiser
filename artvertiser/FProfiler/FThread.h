@@ -23,7 +23,7 @@ public:
     virtual ~FThread() { if ( thread_running ) StopThread(); }
 
     /// start running the ThreadedFunction
-    void StartThread();
+    void StartThread( int thread_priority = -1 ) ;
     /// stop running ThreadedFunction explicitly. not recommended..
     void StopThread();
 

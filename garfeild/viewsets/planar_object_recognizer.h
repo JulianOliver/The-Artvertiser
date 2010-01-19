@@ -56,18 +56,19 @@ public:
   planar_object_recognizer();
 
   //! Create from the data stored in the directory \c directory_name
-  planar_object_recognizer(string directory_name);
+  planar_object_recognizer(string directory_name, pyr_yape** point_detector_ptr );
 
   ~planar_object_recognizer(void);
 
   //! Build the model and save it on disk.
   //! \return true on success, false on failure
-  bool build_with_cache(string filename, int max_point_number_on_model,
+  bool build_with_cache(string filename, pyr_yape** point_detector_ptr,
+                         int max_point_number_on_model,
                         int patch_size, int yape_radius,
                         int tree_number, int nbLev,
                         LEARNPROGRESSION LearnProgress=0);
 
-  bool build(IplImage *model_image,
+  bool build( pyr_yape** point_detector_ptr, IplImage *model_image,
 		  int max_point_number_on_model, int patch_size,
 		  int yape_radius, int tree_number, int nbLev,
 		  LEARNPROGRESSION LearnProgress=0, int *roi=0);
@@ -115,17 +116,22 @@ public:
   //@}
 
   //! Create the point recognizer (see \ref forest field)
-  void learn(int max_point_number_on_model,
+  void learn( pyr_yape** point_detector_ptr, int max_point_number_on_model,
              int patch_size, int yape_radius,
              int tree_number, int nbLev=5,
              LEARNPROGRESSION LearnProgress=0);
 
   //! Save data in the given directory. The directory must exist.
-  void save(string directory_name);
+  void save(string directory_name, pyr_yape* point_detector);
 
   //! load data from a given directory.
   //! \return true on success, false on failure.
-  bool load(string directory_name);
+  bool load(string directory_name, pyr_yape** point_detector_ptr);
+
+  //! get the number of pyramid levels
+  //! \return the number of pyramid smoothing levels
+  int get_num_pyramid_levels( ) { return new_images_generator.get_level_number(); }
+  int get_yape_radius() { return new_images_generator.get_gaussian_smoothing_kernel_size(); }
 
   /*!
   \brief Detect the object in the given input image.
@@ -140,7 +146,8 @@ public:
   - \c estimate_affine_transformation
   - \c estimate_homographic_transformation_nonlinear_method
   */
-  bool detect(IplImage * input_image);
+  bool detect(IplImage * input_image );
+  bool detect( IplImage* input_image, keypoint* _keypoints, int _num_keypoints, object_view* object_input_view );
 
   //! set the maximum number of points we want to detect
   void set_max_detected_pts(int max);
@@ -149,8 +156,8 @@ public:
   /** \name Functions called by the detect() function
   */
   void detect_points(IplImage * input_image);
-  void preprocess_points(void);
-  void match_points(bool fill_match_struct = true);
+  void preprocess_points(object_view* object_input_view);
+  void match_points(object_view* object_input_view, bool fill_match_struct = true);
   bool estimate_affine_transformation(void);
   /// damian: unroll into flat loops
   bool estimate_affine_transformation_unrolled(void);
@@ -191,7 +198,7 @@ public:
   float detected_u_corner3, detected_v_corner3;
   float detected_u_corner4, detected_v_corner4;
 
-  pyr_yape * point_detector;
+  //pyr_yape * point_detector;
 
   //! For visualization
   IplImage * create_result_image(IplImage * input_image,
@@ -206,8 +213,8 @@ public:
 
   //! For debugging: save one image per match in dir matches
   void save_one_image_per_match(IplImage * input_image, const char * matches_dir);
-  void save_one_image_per_match_model_to_input(IplImage * input_image, const char * matches_dir);
-  void save_one_image_per_match_input_to_model(IplImage * input_image, const char * matches_dir);
+  void save_one_image_per_match_model_to_input(IplImage * input_image, const char * matches_dir, object_view* object_input_view );
+  void save_one_image_per_match_input_to_model(IplImage * input_image, const char * matches_dir, object_view* object_input_view);
 
   ///////////////////////////////////////////////////////////////////////////
 
@@ -216,11 +223,11 @@ public:
 
   affine_image_generator new_images_generator;
 
-  object_view * object_input_view;
+  //object_view * object_input_view;
 
   pair<object_keypoint, int> * search_for_existing_model_point(vector< pair<object_keypoint, int> > * tmp_model_points,
     float cu, float cv, int scale);
-  void detect_most_stable_model_points(int max_point_number_on_model,
+  void detect_most_stable_model_points(pyr_yape* point_detector, int max_point_number_on_model,
                                        int patch_size, int view_number,
                                        double min_view_rate,
                                        LEARNPROGRESSION LearnProgress=0);
@@ -311,7 +318,7 @@ public:
   int u_input_image, v_input_image; // up left corner of inputImage in modelInputImage
   //@}
 
-  void check_target_size(IplImage *image);
+  void check_target_size(IplImage *image/*, pyr_yape** point_detector_ptr */);
 
 private:
 

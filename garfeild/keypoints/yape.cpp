@@ -48,6 +48,7 @@ bool operator <(const keypoint &p1, const keypoint &p2)
 
 yape::yape(int _width, int _height)
 {
+  printf("yape under construction\n");
   width = _width;
   height = _height;
 
@@ -63,6 +64,7 @@ yape::yape(int _width, int _height)
   set_minimal_neighbor_number(3);
 
   init_for_monoscale();
+  printf("yape ready : %x, max radius %i, Drs_nb is %x\n", this, yape_max_radius, Dirs_nb );
 }
 
 yape::~yape()
@@ -1130,6 +1132,7 @@ void yape::subpix_refine(IplImage *im, keypoint *p)
 pyr_yape::pyr_yape(int w, int h, int nbLev)
 : yape (w,h)
 {
+    //printf("pyr_yape ctor\n");
   internal_pim = 0;
   pscores = new PyrImage(scores, nbLev);
   pDirs[0] = Dirs;
@@ -1144,6 +1147,9 @@ pyr_yape::pyr_yape(int w, int h, int nbLev)
     for(int R = 1; R < yape_max_radius; R++)
       precompute_directions(pim[i], pDirs[i]->t[R], &(pDirs_nb[i][R]), R);
   }
+
+      //printf("pyr_yape ready (%i levels)\n", nbLev );
+
 }
 
 pyr_yape::~pyr_yape()
@@ -1173,12 +1179,16 @@ void pyr_yape::select_level(int l)
 */
 int pyr_yape::detect(PyrImage *image, keypoint *points, int max_point_number)
 {
+      //printf("::detect start: Dirs_nb %x\n", Dirs_nb );
+
   reserve_tmp_arrays();
 
+      //printf("::detect 0: Dirs_nb %x\n", Dirs_nb );
     PROFILE_SECTION_PUSH("detect + maxima" );
   for (int i=image->nbLev-1; i>=0; --i)
   {
     select_level(i);
+      //printf("::detect 1:%i: Dirs_nb %x\n", i, Dirs_nb );
     raw_detect_mt(image->images[i]);
     get_local_maxima(image->images[i], radius, float(i));
   }
@@ -1213,8 +1223,10 @@ int pyr_yape::detect(PyrImage *image, keypoint *points, int max_point_number)
 */
 int pyr_yape::pyramidBlurDetect(IplImage *im, keypoint *points, int max_point_number, PyrImage *caller_pim)
 {
-    PROFILE_THIS_FUNCTION();
+    PROFILE_THIS_BLOCK( "pyramidBlurDetect (yape)");
   assert(im->nChannels == 1);
+
+  //printf("pyramidBlurDetect: Dirs_nb %x\n", Dirs_nb );
 
   PyrImage *pim;
 
@@ -1238,22 +1250,27 @@ int pyr_yape::pyramidBlurDetect(IplImage *im, keypoint *points, int max_point_nu
     pim = caller_pim;
     assert (im->width == caller_pim->images[0]->width);
   }
+  //printf("pyramidBlurDetect 0: Dirs_nb %x\n", Dirs_nb );
 
   int gaussian_filter_size = 3;
   if (radius >= 5) gaussian_filter_size = 5;
   if (radius >= 7) gaussian_filter_size = 7;
 
-  PROFILE_SECTION_PUSH("gaussian");
+  PROFILE_SECTION_PUSH("gaussian level0");
   cvSmooth(im, pim->images[0], CV_GAUSSIAN, gaussian_filter_size, gaussian_filter_size);
   PROFILE_SECTION_POP();
+  //printf("pyramidBlurDetect 1: Dirs_nb %x\n", Dirs_nb );
 
-  PROFILE_SECTION_PUSH("build");
+  PROFILE_SECTION_PUSH("build pyramid");
   pim->build();
   PROFILE_SECTION_POP();
+  //printf("pyramidBlurDetect 2: Dirs_nb %x\n", Dirs_nb );
 
-  PROFILE_SECTION_PUSH("detect");
+  PROFILE_SECTION_PUSH("detect points");
   int res = detect(pim, points, max_point_number);
   PROFILE_SECTION_POP();
+
+  //printf("pyramidBlurDetect end: Dirs_nb %x\n", Dirs_nb );
   return res;
 }
 

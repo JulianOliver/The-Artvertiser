@@ -12,7 +12,7 @@
 #include <sys/errno.h>
 #include <signal.h>
 
-void FThread::StartThread()
+void FThread::StartThread( int thread_priority )
 {
 	if ( thread_running ) {
 	    printf("FThread::Start(): FThread %x already running\n", this );
@@ -25,9 +25,60 @@ void FThread::StartThread()
     pthread_attr_setdetachstate(&thread_attr, PTHREAD_CREATE_JOINABLE);
     // launch
 	int result = pthread_create( &the_thread, &thread_attr, run_function, this );
+
+    // priority
+    if ( thread_priority > 0 )
+    {
+        printf("attempting to set thread priority to %i\n" ,thread_priority );
+        struct sched_param param;
+        param.sched_priority = thread_priority;
+        /*int res = pthread_attr_setschedpolicy( &thread_attr, SCHED_RR );
+        if ( res != 0 )
+        {
+            printf("pthread_attr_setschedpolicy failed: %s\n",
+                   (res == ENOSYS) ? "ENOSYS" :
+                   (res == EINVAL) ? "EINVAL" :
+                   (res == ENOTSUP) ? "ENOTSUP" :
+                   "???"
+                   );
+        }
+        res = pthread_attr_setschedparam( &thread_attr, &param );
+        if ( res != 0 )
+        {
+            printf("pthread_attr_setschedparam failed: %s\n",
+                   (res == EINVAL) ? "EINVAL" :
+                   (res == ENOTSUP) ? "ENOTSUP" :
+                   "???"
+                   );
+        }*/
+        int res = pthread_setschedparam( the_thread, SCHED_RR, &param );
+        if ( res != 0 )
+        {
+            printf("pthread_setschedparam failed: %s\n",
+                   (res == ENOSYS) ? "ENOSYS" :
+                   (res == EINVAL) ? "EINVAL" :
+                   (res == ENOTSUP) ? "ENOTSUP" :
+                   (res == EPERM) ? "EPERM" :
+                   (res == ESRCH) ? "ESRCH" :
+                   "???"
+                   );
+        }
+        printf("setsched -> %i\n", param.sched_priority );
+    }
+
+    int policy;
+    struct sched_param param;
+    pthread_getschedparam( the_thread, &policy, &param );
+    printf("created FThread policy %s priority %i\n",
+                   (policy == SCHED_FIFO)  ? "SCHED_FIFO" :
+                   (policy == SCHED_RR)    ? "SCHED_RR" :
+                   (policy == SCHED_OTHER) ? "SCHED_OTHER" :
+                   "???",
+                   param.sched_priority);
+
+
     pthread_attr_destroy( &thread_attr );
 	assert( result == 0 );
-	pthread_detach( the_thread );
 	thread_running = true;
 }
 
