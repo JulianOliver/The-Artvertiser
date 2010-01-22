@@ -41,6 +41,7 @@ MultiThreadCapture::MultiThreadCapture( CvCapture* _capture )
     last_frame(0),  last_frame_ret(0),  last_frame_draw(0),     last_frame_draw_ret(0),     last_frame_working(0),
     timestamp(0),   timestamp_ret(0),   timestamp_draw(0),      timestamp_draw_ret(0),      timestamp_working(0),
     processed(0),   processed_ret(0),   processed_working(0),
+    capture_frame(0), process_thread_should_exit(false), process_thread_semaphore(0), /* start semaphore in busy state */
     object_input_view(0), object_input_view_ret(0), object_input_view_working(0),
     new_draw_frame_available(false),
     new_detect_frame_available(false),
@@ -76,6 +77,11 @@ MultiThreadCapture::~MultiThreadCapture()
     delete[] kp_draw_ret;
     delete[] kp_detect;
     delete[] kp_detect_ret;
+
+	if ( capture_frame )
+	{
+		cvReleaseImage( &capture_frame );
+	}
 
     // release process size for frame capture, if it's unique
     if ( frame_processsize &&
@@ -139,11 +145,18 @@ void MultiThreadCapture::startCapture()
     new_draw_frame_available=false;
     new_detect_frame_available=false;
 
+    // start the processing thread
+    startProcessThread();
+    // start the capturing trhead
     FThread::StartThread( 50/* priority */ );
 }
 
 void MultiThreadCapture::stopCapture()
 {
+    // stop the processing thread
+    stopProcessThread();
+
+    // stop the capture thread
     FThread::StopThread();
 
     new_draw_frame_available=false;
@@ -175,165 +188,31 @@ void MultiThreadCapture::ThreadedFunction()
         PROFILE_SECTION_POP();
         if ( f )
         {
-            // got! now process
+            // got! now put into capture frame
+
             PROFILE_SECTION_PUSH("mtc capture frame");
 
-
-            // store timestamp
-            if ( timestamp_working == 0 )
-            {
-                timestamp_working = new FTime();
-            }
-            timestamp_working->SetNow();
-
+            capture_frame_lock.Wait();
             // store locally
-            if ( last_frame_working==0 || last_frame_working->width != f->width || last_frame_working->height != f->height || last_frame_working->depth != f->depth )
+            if ( capture_frame==0 || capture_frame->width != f->width ||
+                capture_frame->height != f->height ||
+                capture_frame->depth != f->depth )
             {
-                if ( last_frame_working )
-                    cvReleaseImage( &last_frame_working );
-                last_frame_working = cvCreateImage( cvGetSize( f ) , IPL_DEPTH_8U, f->nChannels );
+                if ( capture_frame )
+                    cvReleaseImage( &capture_frame );
+                capture_frame = cvCreateImage( cvGetSize( f ) , IPL_DEPTH_8U, f->nChannels );
             }
-            cvCopy( f, last_frame_working );
+            cvCopy( f, capture_frame );
 
-            // process_working
-            if ( width != 0 )
-            {
-                PROFILE_SECTION_PUSH("processing");
-                CvSize process_size = cvSize( width, height );
-                CvSize frame_size = cvGetSize( last_frame_working );
+            capture_frame_lock.Signal();
 
-                // ok
-                // if framesize == processsize and nChannels correct, then processed_working=frame
-                // if framesize != processsize and nChannels correct, resize frame->processed_working
+            PROFILE_SECTION_POP();
 
-                // if framesize == processsize and nChannels wrong,         framedetect=frame then cvtcolor framedetect->processed_working
-                // if framesize != processsize and nChannels wrong, resize frame->framedetect then cvtcolor framedetect->processed_working
-
-                // already processed_working?
-                bool frame_process_same_size = (frame_size.width == process_size.width && frame_size.height == process_size.height);
-                if ( last_frame_working->nChannels == nChannels )
-                {
-                    if ( frame_process_same_size )
-                        processed_working = last_frame_working;
-                    else
-                    {
-                        PROFILE_SECTION_PUSH( "resize" );
-                        if ( !processed_working )
-                            processed_working = cvCreateImage( cvSize( process_size.width, process_size.height ), IPL_DEPTH_8U, nChannels );
-                        cvResize( last_frame_working, processed_working );
-                        PROFILE_SECTION_POP();
-                    }
-                }
-                else
-                {
-                    PROFILE_SECTION_PUSH( "resize" );
-                    if ( frame_process_same_size )
-                        frame_processsize = last_frame_working;
-                    else
-                    {
-                        if ( !frame_processsize || frame_processsize->width != process_size.width || frame_processsize->height != process_size.height )
-                        {
-                            if ( frame_processsize )
-                                cvReleaseImage( &frame_processsize );
-                            frame_processsize = cvCreateImage( process_size, IPL_DEPTH_8U, f->nChannels );
-                        }
-                        cvResize( last_frame_working, frame_processsize );
-                    }
-                    PROFILE_SECTION_POP();
-
-                    PROFILE_SECTION_PUSH( "convert colors" );
-                    if ( !processed_working )
-                        processed_working = cvCreateImage( cvSize( process_size.width, process_size.height ), IPL_DEPTH_8U, nChannels );
-                    int convert = (nChannels == 1?CV_RGBA2GRAY:CV_GRAY2RGBA);
-                    cvCvtColor( frame_processsize, processed_working, convert );
-                    PROFILE_SECTION_POP();
-                    /*PROFILE_SECTION_PUSH( "equalize hist" );
-                    cvEqualizeHist( processed_working, processed_working );
-                    PROFILE_SECTION_POP();*/
-                }
-
-                // keypoints
-                if ( feature_detector )
-                {
-//                    feature_detector_lock.Wait();
-
-                    //check_target_size(input_image);
-                    //point_detector->set_use_bins(use_bins_for_input_image);
-                    //point_detector->set_tau(point_detector_tau);
-
-                    feature_detector_lock.Wait();
-                    if ( object_input_view_working == NULL )
-                        object_input_view_working = new object_view(processed_working->width,
-                                                            processed_working->height,
-                                                            num_pyramid_levels );
-
-                    kp_working_count = feature_detector->pyramidBlurDetect(processed_working,
-                                                                        kp_working, MAX_KEYPOINTS,
-                                                                       &object_input_view_working->image);
-                    //printf("found %i points\n", kp_working_count);
-                    feature_detector_lock.Signal();
-
-                    // done
-                    //feature_detector_lock.Signal();
-                }
-
-                PROFILE_SECTION_PUSH("transfer ptr/ptr");
-
-                // ok, now transfer to pointers
-                last_frame_lock.Wait();
-
-                // copy last_frame to last_frame_draw
-                if ( last_frame_draw == NULL )
-                    last_frame_draw = (IplImage*)cvClone( last_frame_working );
-                else
-                    cvCopy( last_frame_working, last_frame_draw );
-
-                // put working pointers to real pointers
-                IplImage* temp = last_frame;
-                last_frame = last_frame_working;
-                last_frame_working = temp;
-
-                temp = processed;
-                processed = processed_working;
-                processed_working = temp;
-
-                // timestamp
-                if ( timestamp == NULL )
-                    timestamp = new FTime();
-                *timestamp = *timestamp_working;
-                if ( timestamp_draw == NULL )
-                    timestamp_draw = new FTime();
-                // copy
-                *timestamp_draw = *timestamp_working;
-
-                // copy features
-                kp_detect_count = kp_working_count;
-                kp_draw_count = kp_working_count;
-                for ( int i=0; i<kp_working_count;i ++ )
-                {
-                    kp_detect[i] = kp_working[i];
-                    kp_draw[i] = kp_working[i];
-                }
-
-                // object view
-                object_view* temp_o = object_input_view;
-                object_input_view = object_input_view_working;
-                object_input_view_working = object_input_view;
-
-                // we have a new frame
-                new_draw_frame_available = true;
-                new_detect_frame_available = true;
-
-                last_frame_lock.Signal();
-
-                PROFILE_SECTION_POP();
-
-
-                PROFILE_SECTION_POP(); // "processing"
-            }
-
-            PROFILE_SECTION_POP(); // "frame"
+            // tell the process thread
+            //printf("signalling process_thread_semaphore\n");
+            process_thread_semaphore.Signal();
         }
+
     }
     else
     {
@@ -345,6 +224,222 @@ void MultiThreadCapture::ThreadedFunction()
     // wait a bit
     usleep( 100 );
 
+}
+
+
+void MultiThreadCapture::startProcessThread()
+{
+	pthread_attr_t thread_attr;
+    pthread_attr_init(&thread_attr);
+    pthread_attr_setdetachstate(&thread_attr, PTHREAD_CREATE_JOINABLE);
+    // launch the thread
+    pthread_create( &process_thread, &thread_attr, processPthreadFunc, this );
+    pthread_attr_destroy( &thread_attr );
+
+}
+
+void MultiThreadCapture::stopProcessThread()
+{
+	process_thread_should_exit = true;
+	process_thread_semaphore.Signal();
+	void* ret;
+	pthread_join( process_thread, &ret );
+}
+
+void* MultiThreadCapture::processPthreadFunc( void* _data )
+{
+	MultiThreadCapture* instance = (MultiThreadCapture*)_data;
+
+	instance->processThreadedFunction();
+
+	pthread_exit(0);
+}
+
+void MultiThreadCapture::processThreadedFunction( )
+{
+
+    //printf("entering processThreadedFunction()\n");
+    while ( true )
+    {
+        process_thread_semaphore.Wait();
+        //printf("process_thread_semaphore got the go ahead\n");
+
+        if ( process_thread_should_exit)
+            break;
+
+        // try to get the lock
+        // if we can't get it, that means there's a new frame
+        // so just wait for the new frame semaphore
+        if ( !capture_frame_lock.TryWait() )
+        {
+
+            //printf("capture frame lock not available: starting again\n");
+            continue;
+        }
+
+        PROFILE_SECTION_PUSH("mtc process frame");
+        // store timestamp
+        if ( timestamp_working == 0 )
+        {
+            timestamp_working = new FTime();
+        }
+        timestamp_working->SetNow();
+
+
+        // capture_frame_lock.Wait(); <-- already have the lock from above
+        // store locally
+        if ( last_frame_working==0 || last_frame_working->width != capture_frame->width ||
+            last_frame_working->height != capture_frame->height ||
+            last_frame_working->depth != capture_frame->depth )
+        {
+            if ( last_frame_working )
+                cvReleaseImage( &last_frame_working );
+            last_frame_working = cvCreateImage( cvGetSize( capture_frame ) , IPL_DEPTH_8U, capture_frame->nChannels );
+        }
+        cvCopy( capture_frame, last_frame_working );
+        capture_frame_lock.Signal();
+
+
+
+        // process_working
+        if ( width != 0 )
+        {
+            PROFILE_SECTION_PUSH("processing");
+            CvSize process_size = cvSize( width, height );
+            CvSize frame_size = cvGetSize( last_frame_working );
+
+            // ok
+            // if framesize == processsize and nChannels correct, then processed_working=frame
+            // if framesize != processsize and nChannels correct, resize frame->processed_working
+
+            // if framesize == processsize and nChannels wrong,         framedetect=frame then cvtcolor framedetect->processed_working
+            // if framesize != processsize and nChannels wrong, resize frame->framedetect then cvtcolor framedetect->processed_working
+
+            // already processed_working?
+            bool frame_process_same_size = (frame_size.width == process_size.width && frame_size.height == process_size.height);
+            if ( last_frame_working->nChannels == nChannels )
+            {
+                if ( frame_process_same_size )
+                    processed_working = last_frame_working;
+                else
+                {
+                    PROFILE_SECTION_PUSH( "resize" );
+                    if ( !processed_working )
+                        processed_working = cvCreateImage( cvSize( process_size.width, process_size.height ), IPL_DEPTH_8U, nChannels );
+                    cvResize( last_frame_working, processed_working );
+                    PROFILE_SECTION_POP();
+                }
+            }
+            else
+            {
+                PROFILE_SECTION_PUSH( "resize" );
+                if ( frame_process_same_size )
+                    frame_processsize = last_frame_working;
+                else
+                {
+                    if ( !frame_processsize || frame_processsize->width != process_size.width || frame_processsize->height != process_size.height )
+                    {
+                        if ( frame_processsize )
+                            cvReleaseImage( &frame_processsize );
+                        frame_processsize = cvCreateImage( process_size, IPL_DEPTH_8U, capture_frame->nChannels );
+                    }
+                    cvResize( last_frame_working, frame_processsize );
+                }
+                PROFILE_SECTION_POP();
+
+                PROFILE_SECTION_PUSH( "convert colors" );
+                if ( !processed_working )
+                    processed_working = cvCreateImage( cvSize( process_size.width, process_size.height ), IPL_DEPTH_8U, nChannels );
+                int convert = (nChannels == 1?CV_RGBA2GRAY:CV_GRAY2RGBA);
+                cvCvtColor( frame_processsize, processed_working, convert );
+                PROFILE_SECTION_POP();
+                /*PROFILE_SECTION_PUSH( "equalize hist" );
+                cvEqualizeHist( processed_working, processed_working );
+                PROFILE_SECTION_POP();*/
+            }
+
+            // keypoints
+            if ( feature_detector )
+            {
+//                    feature_detector_lock.Wait();
+
+                //check_target_size(input_image);
+                //point_detector->set_use_bins(use_bins_for_input_image);
+                //point_detector->set_tau(point_detector_tau);
+
+                feature_detector_lock.Wait();
+                if ( object_input_view_working == NULL )
+                    object_input_view_working = new object_view(processed_working->width,
+                                                        processed_working->height,
+                                                        num_pyramid_levels );
+
+                kp_working_count = feature_detector->pyramidBlurDetect(processed_working,
+                                                                    kp_working, MAX_KEYPOINTS,
+                                                                   &object_input_view_working->image);
+                //printf("found %i points\n", kp_working_count);
+                feature_detector_lock.Signal();
+
+                // done
+                //feature_detector_lock.Signal();
+            }
+
+            PROFILE_SECTION_PUSH("transfer ptr/ptr");
+
+            // ok, now transfer to pointers
+            last_frame_lock.Wait();
+
+            // copy last_frame to last_frame_draw
+            if ( last_frame_draw == NULL )
+                last_frame_draw = (IplImage*)cvClone( last_frame_working );
+            else
+                cvCopy( last_frame_working, last_frame_draw );
+
+            // put working pointers to real pointers
+            IplImage* temp = last_frame;
+            last_frame = last_frame_working;
+            last_frame_working = temp;
+
+            temp = processed;
+            processed = processed_working;
+            processed_working = temp;
+
+            // timestamp
+            if ( timestamp == NULL )
+                timestamp = new FTime();
+            *timestamp = *timestamp_working;
+            if ( timestamp_draw == NULL )
+                timestamp_draw = new FTime();
+            // copy
+            *timestamp_draw = *timestamp_working;
+
+            // copy features
+            kp_detect_count = kp_working_count;
+            kp_draw_count = kp_working_count;
+            for ( int i=0; i<kp_working_count;i ++ )
+            {
+                kp_detect[i] = kp_working[i];
+                kp_draw[i] = kp_working[i];
+            }
+
+            // object view
+            object_view* temp_o = object_input_view;
+            object_input_view = object_input_view_working;
+            object_input_view_working = object_input_view;
+
+            // we have a new frame
+            new_draw_frame_available = true;
+            new_detect_frame_available = true;
+
+            last_frame_lock.Signal();
+
+            PROFILE_SECTION_POP();
+
+
+            PROFILE_SECTION_POP(); // "processing"
+        } // if ( width != 0 )
+
+        PROFILE_SECTION_POP(); // "mtc process frame"
+    } // while (true)
 }
 
 

@@ -122,11 +122,28 @@ private:
     /// overridden from base
     void ThreadedFunction();
 
+	/// process thread
+	void startProcessThread();
+	void stopProcessThread();
+	/// for pthreads interface
+	static void* processPthreadFunc( void* );
+	/// the work actually happens here
+	void processThreadedFunction();
+
     /// swap detect thread pointers
     void swapDetectPointers();
     void swapDrawPointers();
 
     CvCapture* capture;
+
+	// for the capture threa
+    FSemaphore capture_frame_lock;
+    IplImage* capture_frame;
+
+	// for the process thread
+	bool process_thread_should_exit;
+	pthread_t process_thread;
+	FSemaphore process_thread_semaphore;
 
     // lock for the last frame
     FSemaphore last_frame_lock;
