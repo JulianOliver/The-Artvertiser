@@ -155,7 +155,7 @@ void MultiGrab::Cam::shutdownMultiThreadCapture()
 }
 
 // this could be run in a separate thread
-bool MultiGrab::Cam::detect()
+bool MultiGrab::Cam::detect( keypoint** keypoints, int* num_keypoints )
 {
     PROFILE_THIS_FUNCTION();
 	CvSize detect_size = cvSize( detect_width, detect_height );
@@ -165,11 +165,9 @@ bool MultiGrab::Cam::detect()
     PROFILE_SECTION_PUSH("retrieve");
     IplImage *gray_temp, *frame_temp;
     FTime timestamp;
-    keypoint* keypoints = NULL;
-    int num_keypoints = 0;
     object_view* object_input_view = NULL;
     bool got = mtc->getLastDetectFrame( &gray_temp, &frame_temp, &timestamp,
-                                          &keypoints, &num_keypoints, &object_input_view,
+                                          keypoints, num_keypoints, &object_input_view,
                                           /*block until available*/ true );
     PROFILE_SECTION_POP();
     if ( !got || frame_temp == 0 || gray_temp == 0 || object_input_view == 0 )
@@ -187,7 +185,7 @@ bool MultiGrab::Cam::detect()
 	PROFILE_SECTION_PUSH( "detect" );
 	// run the detector
 	bool res = false;
-	if (detector.detect(gray, keypoints, num_keypoints, object_input_view )) {
+	if (detector.detect(gray, *keypoints, *num_keypoints, object_input_view )) {
 	    PROFILE_SECTION_PUSH("light accumulator")
 		if (lc)
             lc->averageImage(frame, detector.H);

@@ -132,6 +132,7 @@ public:
   //! \return the number of pyramid smoothing levels
   int get_num_pyramid_levels( ) { return new_images_generator.get_level_number(); }
   int get_yape_radius() { return new_images_generator.get_gaussian_smoothing_kernel_size(); }
+  //void get_image_roi() { return new_images_generator.get_image_roi(); }
 
   /*!
   \brief Detect the object in the given input image.

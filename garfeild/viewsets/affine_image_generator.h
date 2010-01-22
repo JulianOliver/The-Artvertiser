@@ -91,7 +91,10 @@ class affine_image_generator : public example_generator
                int _u_corner2, int _v_corner2,
                int _u_corner3, int _v_corner3,
                int _u_corner4, int _v_corner4);
+  /// corners is int[8] (u,v interleaved)
+  void get_roi( int* corners );
   bool inside_roi(int u, int v);
+
   void set_default_values(void);
 
   vector<image_class_example *> * generate_random_examples(void);

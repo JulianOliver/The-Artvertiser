@@ -2,7 +2,9 @@
 #include "../../starter/image/pyrimage.h"
 #include <algorithm>
 
-static const float BIN_WIDTH = 10.0f;
+static const float BIN_WIDTH = 32.0f;
+
+
 
 void KeypointNeighbourSearch::addPrior( keypoint* keypoints, int num_keypoints, ofxVec2f corners[4], const FTime& timestamp )
 {
@@ -21,10 +23,19 @@ void KeypointNeighbourSearch::addPrior( keypoint* keypoints, int num_keypoints, 
         max_y = max( max_y, corners[i].y );
     }
 
+    // store corners locally
+    for ( int i=1; i<4; i++ )
+    {
+        prior_corners[i] = corners[i];
+    }
+
+    lock();
+
     x_bins.clear();
     x_bins.resize( (max_x-min_x) / BIN_WIDTH );
     y_bins.clear();
     y_bins.resize( (max_y-min_y) / BIN_WIDTH );
+    prior_keypoints.clear();
 
     // now search
     for ( int i=0; i<num_keypoints; i++ )
@@ -67,11 +78,21 @@ void KeypointNeighbourSearch::addPrior( keypoint* keypoints, int num_keypoints, 
             }*/
         }
     }
+
+    unlock();
 }
 
 float KeypointNeighbourSearch::getProbability( keypoint* this_frame_keypoints, int num_keypoints,
                                              const ofxVec2f& translation )
 {
+    lock();
+
+    if ( prior_keypoints.size()== 0 )
+    {
+        unlock();
+        return -1;
+    }
+
     //float DISTANCE_THRESH_SQ = DISTANCE_THRESH*DISTANCE_THRESH;
     // counter for number of new keypoints within our (transposed) roi
     int in_roi_count = 0;
@@ -79,6 +100,8 @@ float KeypointNeighbourSearch::getProbability( keypoint* this_frame_keypoints, i
     float total_distance = 0;
     // counter for distance accumulator
     int distance_count = 0;
+    /*printf("searching: min_x %3.2f, max_x %3.2f, min_y %3.2f, max_y %3.2f\n",
+           min_x, max_x, min_y, max_y );*/
     for ( int i=0; i<num_keypoints; i++ )
     {
         // todo: use random selection
@@ -93,6 +116,9 @@ float KeypointNeighbourSearch::getProbability( keypoint* this_frame_keypoints, i
 
         ofxVec2f search_kp(kp_x-translation.x,
                            kp_y-translation.y );
+        /*printf("incoming kp at %3.2f,%3.2f -> matching with prior at %3.2f,%3.2f\n",
+               kp_x, kp_y, search_kp.x, search_kp.y );*/
+
         if (search_kp.x < min_x ||
             search_kp.x > max_x ||
             search_kp.y < min_y ||
@@ -100,17 +126,39 @@ float KeypointNeighbourSearch::getProbability( keypoint* this_frame_keypoints, i
             continue;
 
         // quadrants included at construct-time
-        vector<int> matching;
+
         int x_bin = xBinIndex(search_kp.x);
         int y_bin = yBinIndex(search_kp.y);
+        /*
+        printf("x bin is %i(/%i), y_bin is %i(/%i)\n", x_bin, x_bins.size(), y_bin, y_bins.size() );
+        int count=0;
+        for ( set<int>::iterator it = x_bins[x_bin].begin();
+            it != x_bins[x_bin].end();
+            ++it, ++count )
+        {
+            printf("%s %i", count==0?"":",", *it );
+        }
+        count = 0;
+        printf("\n");
+        for ( set<int>::iterator it = y_bins[y_bin].begin();
+            it != y_bins[y_bin].end();
+            ++it, ++count )
+        {
+            printf("%s %i", count==0?"":",", *it );
+        }
+        printf("\n");*/
+
+        vector<int> matching;
         set_intersection( x_bins[x_bin].begin(), x_bins[x_bin].end(),
                           y_bins[y_bin].begin(), y_bins[y_bin].end(),
-                          matching.begin() );
+                          std::back_inserter(matching) );
 
         // make a score
-        for ( int i=0; i<matching.size(); i++ )
+        for ( vector<int>::iterator jt = matching.begin();
+            jt != matching.end();
+            ++jt )
         {
-            ofxVec2f& prior = prior_keypoints[matching[i]];
+            ofxVec2f& prior = prior_keypoints[*jt];
             float dx = search_kp.x-prior.x;
             float dy = search_kp.y-prior.y;
             float distance_sq = dx*dx + dy*dy;
@@ -119,6 +167,8 @@ float KeypointNeighbourSearch::getProbability( keypoint* this_frame_keypoints, i
         distance_count += matching.size();
         ++in_roi_count;
     }
+
+    unlock();
 
     // now divide to average, and also divide by roi count for a confidence figure
     if ( distance_count > 0 )
@@ -154,17 +204,21 @@ void KeypointNeighbourSearch::createProbabilityImage( unsigned char* pixels, int
 }
 
 
-bool KeypointNeighbourSearch::refine( const ofxVec2f& initial_translation_estimate, keypoint* this_frame_keypoints, int num_keypoints, const FTime& timestamp,
-                ofxVec2f& refined_estimate )
+bool KeypointNeighbourSearch::refine( const ofxVec2f& initial_translation_estimate, keypoint* this_frame_keypoints,
+                                     int num_keypoints, const FTime& timestamp,
+                                    ofxVec2f& refined_estimate, float & final_score )
 {
     // get prior
     // do we have prior keypoints?
     if ( timestamp < prior_keypoints_timestamp )
         return false;
 
+    if  ( prior_keypoints.size() == 0 )
+        return false;
+
     // starting from initial_translation_estimate, refine to minimize
     static const float ROOT2 = sqrtf(2.0f);
-    static const float INITIAL_LENGTH = 64.0f;
+    static const float INITIAL_LENGTH = 16.0f;
 
     float length = INITIAL_LENGTH;
     ofxVec2f deltas[8] = {
@@ -180,20 +234,25 @@ bool KeypointNeighbourSearch::refine( const ofxVec2f& initial_translation_estima
 
     // binary search
     float curr_score = getProbability( this_frame_keypoints, num_keypoints, initial_translation_estimate );
-    printf("initial score is %f, refining...\n", curr_score );
+    if ( curr_score < 0 )
+    {
+        // fail
+        return false;
+    }
+    //printf("initial score is %f, refining...\n", curr_score );
     ofxVec2f curr_delta;
     for ( int i=0; i<6; i++ )
     {
         // just for this level
         int best_delta = -1;
         float best_score = curr_score;
-        for ( int j=0; j<8; j++ )
+        for ( int j=0; j<7; j++ )
         {
             float score = getProbability( this_frame_keypoints, num_keypoints, initial_translation_estimate+curr_delta+length*deltas[j] );
             if ( score >= 0 && score < best_score )
             {
                 // found a better score
-                printf(" . better score %f found at len %3.1f\n", score, length );
+                //printf(" . better score %f found at len %3.1f\n", score, length );
                 best_delta = j;
                 best_score = score;
             }
@@ -201,15 +260,15 @@ bool KeypointNeighbourSearch::refine( const ofxVec2f& initial_translation_estima
         if ( best_delta != -1 )
         {
             curr_delta += length*deltas[best_delta];
-            printf(" > delta now %3.1f,%3.1f\n", curr_delta.x, curr_delta.y );
+            //printf(" > delta now %3.1f,%3.1f\n", curr_delta.x, curr_delta.y );
             curr_score = best_score;
         }
         // next level
         length *= 0.5f;
     }
-    printf("final score is %f\n", curr_score );
-
+    final_score = sqrtf(curr_score);
     refined_estimate = initial_translation_estimate+curr_delta;
+
     return true;
 }
 

@@ -1,6 +1,6 @@
 /*
-Copyright 2005, 2006 Computer Vision Lab, 
-Ecole Polytechnique Federale de Lausanne (EPFL), Switzerland. 
+Copyright 2005, 2006 Computer Vision Lab,
+Ecole Polytechnique Federale de Lausanne (EPFL), Switzerland.
 All rights reserved.
 
 This file is part of BazAR.
@@ -16,7 +16,7 @@ PARTICULAR PURPOSE. See the GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License along with
 BazAR; if not, write to the Free Software Foundation, Inc., 51 Franklin
-Street, Fifth Floor, Boston, MA 02110-1301, USA 
+Street, Fifth Floor, Boston, MA 02110-1301, USA
 */
 #include <stdlib.h>
 #include <math.h>
@@ -100,7 +100,7 @@ void affine_image_generator::set_noise_level(int noise_level)
 }
 
 void affine_image_generator::set_original_image(IplImage * p_original_image,
-                                                int _u_corner1, int _v_corner1, int _u_corner2, int _v_corner2, 
+                                                int _u_corner1, int _v_corner1, int _u_corner2, int _v_corner2,
                                                 int _u_corner3, int _v_corner3, int _u_corner4, int _v_corner4,
                                                 int affine_image_width, int affine_image_height)
 
@@ -129,9 +129,9 @@ void affine_image_generator::set_original_image(IplImage * p_original_image,
   orientation_corrector = new keypoint_orientation_corrector(original_image->width, original_image->height,
                                                              patch_size, level_number);
 
-  set_roi(_u_corner1, _v_corner1, 
-          _u_corner2, _v_corner2, 
-          _u_corner3, _v_corner3, 
+  set_roi(_u_corner1, _v_corner1,
+          _u_corner2, _v_corner2,
+          _u_corner3, _v_corner3,
           _u_corner4, _v_corner4);
 }
 
@@ -188,9 +188,9 @@ void affine_image_generator::add_keypoint(float u, float v, int scale, int class
   point_number++;
 }
 
-void affine_image_generator::set_level_number(int p_level_number) 
+void affine_image_generator::set_level_number(int p_level_number)
 {
-  level_number = p_level_number; 
+  level_number = p_level_number;
 
   if (affine_image != 0)
   {
@@ -207,7 +207,7 @@ void affine_image_generator::set_level_number(int p_level_number)
 
 void affine_image_generator::set_patch_size(int p_patch_size)
 {
-  patch_size = p_patch_size; 
+  patch_size = p_patch_size;
 
   if (original_image != 0)
   {
@@ -219,9 +219,9 @@ void affine_image_generator::set_patch_size(int p_patch_size)
   }
 }
 
-void affine_image_generator::set_roi(int _u_corner1, int _v_corner1, 
-                                     int _u_corner2, int _v_corner2, 
-                                     int _u_corner3, int _v_corner3, 
+void affine_image_generator::set_roi(int _u_corner1, int _v_corner1,
+                                     int _u_corner2, int _v_corner2,
+                                     int _u_corner3, int _v_corner3,
                                      int _u_corner4, int _v_corner4)
 {
   if (_u_corner1 >= 0)
@@ -252,22 +252,22 @@ void affine_image_generator::set_roi(int _u_corner1, int _v_corner1,
   }
 }
 
-static int min4(int a, int b, int c, int d) 
+static int min4(int a, int b, int c, int d)
 {
   return MIN(a, MIN(b, MIN(c,d)));
 }
 
-static int max4(int a, int b, int c, int d) 
+static int max4(int a, int b, int c, int d)
 {
   return MAX(a, MAX(b, MAX(c,d)));
 }
 
-static float min4(float a, float b, float c, float d) 
+static float min4(float a, float b, float c, float d)
 {
   return MIN(a, MIN(b, MIN(c,d)));
 }
 
-static float max4(float a, float b, float c, float d) 
+static float max4(float a, float b, float c, float d)
 {
   return MAX(a, MAX(b, MAX(c,d)));
 }
@@ -300,7 +300,7 @@ void affine_image_generator::set_range_variation_for_phi(float p_min_phi, float 
 }
 
 //! Default method. Between 0.5 : 1.5 for both
-void affine_image_generator::independent_scaling(float p_min_lambda1, float p_max_lambda1, 
+void affine_image_generator::independent_scaling(float p_min_lambda1, float p_max_lambda1,
                                                  float p_min_lambda2, float p_max_lambda2)
 {
   scaling_method = 0;
@@ -313,7 +313,7 @@ void affine_image_generator::independent_scaling(float p_min_lambda1, float p_ma
 }
 
 //! Constrained scaling. Adds a constraint on the range of the product of l1 and l2.
-void affine_image_generator::constrained_scaling(float p_min_lambda1, float p_max_lambda1, 
+void affine_image_generator::constrained_scaling(float p_min_lambda1, float p_max_lambda1,
                                                  float p_min_lambda2, float p_max_lambda2,
                                                  float p_min_l1_l2,   float p_max_l1_l2)
 {
@@ -352,10 +352,10 @@ void affine_image_generator::generate_random_affine_transformation(void)
     } while (lambda1 * lambda2 < min_l1_l2 || lambda1 * lambda2 > max_l1_l2);
   }
 
-  mcvComputeAffineTransfo(a, 
+  mcvComputeAffineTransfo(a,
                           image_width / 2, image_height / 2,
-                          theta, phi, 
-                          lambda1, lambda2, 
+                          theta, phi,
+                          lambda1, lambda2,
                           0, 0);
   int Tx, Ty;
   float nu0, nv0, nu1, nv1, nu2, nv2, nu3, nv3;
@@ -376,10 +376,10 @@ void affine_image_generator::generate_random_affine_transformation(void)
   else
     Ty = image_height - int(max4(nv0, nv1, nv2, nv3)) - patch_size;
 
-  mcvComputeAffineTransfo(a, 
+  mcvComputeAffineTransfo(a,
                           image_width / 2, image_height / 2,
-                          theta, phi, 
-                          lambda1, lambda2, 
+                          theta, phi,
+                          lambda1, lambda2,
                           float(Tx), float(Ty));
 }
 
@@ -388,25 +388,25 @@ void affine_image_generator::generate_Id_affine_transformation(void)
   int image_width  = affine_image->width;
   int image_height = affine_image->height;
 
-  mcvComputeAffineTransfo(a, 
+  mcvComputeAffineTransfo(a,
                           image_width / 2, image_height / 2,
-                          0, 0, 
-                          1., 1., 
+                          0, 0,
+                          1., 1.,
                           0, 0);
 }
 
-void affine_image_generator::affine_transformation(float p_a[6], int width, int height, 
-                                                   float u, float v, 
+void affine_image_generator::affine_transformation(float p_a[6], int width, int height,
+                                                   float u, float v,
                                                    float & nu, float & nv)
 {
   float det = p_a[0] * p_a[4] - p_a[3] * p_a[1];
 
   nu = width  / 2 + 1.f / det * ( p_a[4] * (u - p_a[2]) - p_a[1] * (v - p_a[5]));
-  nv = height / 2 + 1.f / det * (-p_a[3] * (u - p_a[2]) + p_a[0] * (v - p_a[5]));  
+  nv = height / 2 + 1.f / det * (-p_a[3] * (u - p_a[2]) + p_a[0] * (v - p_a[5]));
 }
 
-void affine_image_generator::inverse_affine_transformation(float p_a[6], int width, int height, 
-                                                           float u, float v, 
+void affine_image_generator::inverse_affine_transformation(float p_a[6], int width, int height,
+                                                           float u, float v,
                                                            float & nu, float & nv)
 {
   nu = p_a[0] * (u - width  / 2) + p_a[1] * (v - height / 2) + p_a[2];
@@ -430,16 +430,16 @@ void affine_image_generator::preprocess_point_view(image_class_example * pv, obj
     // Lowe orientation:
     int s = (int)pv->point2d->scale;
 
-    pv->point2d->orientation_in_radians = 
+    pv->point2d->orientation_in_radians =
       orientation_corrector->estimate_orientation_in_radians(ov->image[s],
-      int(pv->point2d->u), int(pv->point2d->v), 
+      int(pv->point2d->u), int(pv->point2d->v),
       ov->gradX[s], ov->gradY[s]);
 
     assert(pv->preprocessed);
 
     orientation_corrector->correct_orientationf(ov->image[s],
-      pv->point2d->u, pv->point2d->v, 
-      pv->preprocessed, 
+      pv->point2d->u, pv->point2d->v,
+      pv->preprocessed,
       pv->point2d->orientation_in_radians, s);
   }
   else
@@ -462,7 +462,7 @@ void affine_image_generator::add_white_noise(IplImage * image)
 
       p += limited_white_noise[index_white_noise];
 
-      if (p > 255) 
+      if (p > 255)
         p = 255;
       else if (p < 0)
         p = 0;
@@ -504,8 +504,8 @@ void affine_image_generator::generate_affine_image(void)
   float h = -(affine_image->height-1)/2;
   float sa[9];
   memcpy(sa,a,9*sizeof(float));
-  a[2] += w*a[0] +h*a[1]; 
-  a[5] += w*a[3] +h*a[4]; 
+  a[2] += w*a[0] +h*a[1];
+  a[5] += w*a[3] +h*a[4];
   cvWarpAffine(processed_original_image, affine_image, &A,CV_INTER_LINEAR+CV_WARP_INVERSE_MAP);
   memcpy(a,sa,9*sizeof(float));
 #endif
@@ -559,7 +559,7 @@ vector<image_class_example *> * affine_image_generator::generate_random_examples
     IplImage * im = smoothed_generated_object_view->image[scale];
     float nu, nv;
 
-    affine_transformation(PyrImage::convCoordf(float(kp->M[0]), scale, 0), 
+    affine_transformation(PyrImage::convCoordf(float(kp->M[0]), scale, 0),
                           PyrImage::convCoordf(float(kp->M[1]), scale, 0),
                           nu, nv);
 
@@ -569,9 +569,9 @@ vector<image_class_example *> * affine_image_generator::generate_random_examples
     if ((int)nu > patch_size && (int)nu < im->width  - patch_size &&
         (int)nv > patch_size && (int)nv < im->height - patch_size)
     {
-      image_class_example * pv = new image_class_example(kp->class_index, 
-                                                         nu, nv, (float)scale, 
-                                                         smoothed_generated_object_view, 
+      image_class_example * pv = new image_class_example(kp->class_index,
+                                                         nu, nv, (float)scale,
+                                                         smoothed_generated_object_view,
                                                          patch_size);
       pv->orig_u = float(kp->M[0]);
       pv->orig_v = float(kp->M[1]);
@@ -606,3 +606,16 @@ void affine_image_generator::release_examples(void)
 
   point_views.clear();
 }
+
+void affine_image_generator::get_roi( int* c )
+{
+    c[0] = u_corner1;
+    c[1] = v_corner1;
+    c[2] = u_corner2;
+    c[3] = v_corner2;
+    c[4] = u_corner3;
+    c[5] = v_corner3;
+    c[6] = u_corner4;
+    c[7] = v_corner4;
+}
+

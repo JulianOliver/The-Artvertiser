@@ -146,9 +146,9 @@ void MultiThreadCapture::startCapture()
     new_detect_frame_available=false;
 
     // start the processing thread
-    startProcessThread();
+    startProcessThread( 30 /* priority, only if running as root */ );
     // start the capturing trhead
-    FThread::StartThread( 50/* priority */ );
+    FThread::StartThread();
 }
 
 void MultiThreadCapture::stopCapture()
@@ -227,7 +227,7 @@ void MultiThreadCapture::ThreadedFunction()
 }
 
 
-void MultiThreadCapture::startProcessThread()
+void MultiThreadCapture::startProcessThread( int thread_priority )
 {
 	pthread_attr_t thread_attr;
     pthread_attr_init(&thread_attr);
@@ -236,6 +236,26 @@ void MultiThreadCapture::startProcessThread()
     pthread_create( &process_thread, &thread_attr, processPthreadFunc, this );
     pthread_attr_destroy( &thread_attr );
 
+    if ( thread_priority > 0 )
+    {
+
+        printf("attempting to set process thread priority to %i\n", thread_priority );
+        struct sched_param param;
+        param.sched_priority = thread_priority;
+        int res = pthread_setschedparam( process_thread, SCHED_RR, &param );
+        if ( res != 0 )
+        {
+            printf("pthread_setschedparam failed: %s\n",
+                   (res == ENOSYS) ? "ENOSYS" :
+                   (res == EINVAL) ? "EINVAL" :
+                   (res == ENOTSUP) ? "ENOTSUP" :
+                   (res == EPERM) ? "EPERM" :
+                   (res == ESRCH) ? "ESRCH" :
+                   "???"
+                   );
+        }
+
+    }
 }
 
 void MultiThreadCapture::stopProcessThread()

@@ -15,7 +15,8 @@ public:
 
     /// track. matrix is 3x4 with translation in last column, keypoints are keypoints, num_keypoints is count,
     /// corners are the 4 corners of the detected rectangle _in keypoint(2d) space_.
-    void addPose( CvMat* matrix, const FTime& timestamp, keypoint* keypoints=NULL, int num_keypoints=0, ofxVec2f* corners=NULL );
+    void addPose( CvMat* matrix, const FTime& timestamp, keypoint* keypoints=NULL, int num_keypoints=0,
+                 ofxVec2f* corners=NULL );
     /// track. rotation_matrix is 3x3 rot matrix, trans is translation
     void addPose( const ofxMatrix4x4& rotation_matrix, const ofxVec3f& trans, const FTime& timestamp,
                  keypoint* keypoints=NULL, int num_keypoints=0, ofxVec2f* corners=NULL );
@@ -31,10 +32,16 @@ public:
     /// Take the given translation estimate in screen space relative and, using the keypoint data from this frame,
     /// refine the estimate against the stored keypoints.
     bool refinePoseUsingKeypoints( const ofxVec2f& translation_2d_estimate_screen_space, keypoint* keypoints, int num_keypoints,
-                                 const FTime& timestamp, ofxVec2f& refined_2d_translation_screen_space );
+                                 const FTime& timestamp, ofxVec2f& refined_2d_translation_screen_space, float &final_score );
 
     /// Put an interpolated translation for the given timestamp into interpolated_translation
     bool getInterpolatedTranslation ( ofxVec3f& interpolated_translation, const FTime& for_time );
+
+    /// fetch current prior keypoints for the keypoint search
+    void getKeypointSearchPrior( vector<ofxVec2f> &storage ) { keypoint_search.getPrior( storage ); }
+
+    /// fetch corners; corners points to an output ofxVec2f[4] array
+    void getKeypointSearchCorners( ofxVec2f* corners ) { keypoint_search.getCorners( corners ); }
 
 private:
 

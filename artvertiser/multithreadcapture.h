@@ -123,7 +123,7 @@ private:
     void ThreadedFunction();
 
 	/// process thread
-	void startProcessThread();
+	void startProcessThread( int thread_priority = 0 /* 0-99, higher is greater */ );
 	void stopProcessThread();
 	/// for pthreads interface
 	static void* processPthreadFunc( void* );

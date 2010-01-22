@@ -56,19 +56,6 @@ void MatrixTracker::addPose( const ofxMatrix4x4& rot, const ofxVec3f& new_transl
 }
 
 
-bool MatrixTracker::refinePoseUsingKeypoints( const ofxVec2f& translation_estimate_screen_space, keypoint* keypoints, int num_keypoints,
-                                              const FTime& timestamp, ofxVec2f& refined_translation_screen_space )
-{
-    // try to refine by shifting translation around
-    // using KeypointNeighbourSearch
-    bool result = keypoint_search.refine( translation_estimate_screen_space, keypoints, num_keypoints, timestamp, refined_translation_screen_space );
-
-    // store refined pose
-
-    // return
-    return result;
-}
-
 /*
     // smooth
     // motivation: translation should be allowed to change faster than orientation
@@ -94,7 +81,8 @@ bool MatrixTracker::refinePoseUsingKeypoints( const ofxVec2f& translation_estima
 
 
 
-bool MatrixTracker::getInterpolatedPose( CvMat* matrix, const FTime& for_time, ofxVec3f& object_space_delta_since_last_stored )
+bool MatrixTracker::getInterpolatedPose( CvMat* matrix, const FTime& for_time,
+                                        ofxVec3f& object_space_delta_since_last_stored )
 {
     ofxMatrix4x4 interpolated_pose;
     bool res = getInterpolatedPose( interpolated_pose, for_time, object_space_delta_since_last_stored );
@@ -288,3 +276,21 @@ void MatrixTracker::smoothAndMakeMatrix( const ofxQuaternion& final_rot, const o
     make4x4MatrixFromQuatTrans( prev_returned_rotation, prev_returned_translation, output );
     //make4x4MatrixFromQuatTrans( final_rot, final_pos, output );
 }
+
+
+
+bool MatrixTracker::refinePoseUsingKeypoints( const ofxVec2f& translation_estimate_screen_space, keypoint* keypoints, int num_keypoints,
+                                              const FTime& timestamp, ofxVec2f& refined_translation_screen_space, float&final_score )
+{
+    // try to refine by shifting translation around
+    // using KeypointNeighbourSearch
+    bool result = keypoint_search.refine( translation_estimate_screen_space,
+                                         keypoints, num_keypoints,
+                                         timestamp, refined_translation_screen_space, final_score );
+
+    // store refined pose
+
+    // return
+    return result;
+}
+

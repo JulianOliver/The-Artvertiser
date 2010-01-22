@@ -92,6 +92,9 @@
 #define DEFAULT_HEIGHT 480
 #define DEFAULT_V4LDEVICE 1
 
+static const float SCORE_THRESH_ACCEPT = 64;
+static const float SCORE_THRESH_STORE = 16;
+
 #define NUMARTVERTS 5
 
 //#define WIDTH 320
@@ -793,6 +796,20 @@ static void drawDetectedPoints( int width, int height, keypoint* keypoints, int 
             printf("\n ");
         printf("%6.2f,%6.2f ", kp.u, kp.v );*/
     }
+
+    // draw keypoint search prior
+    vector<ofxVec2f> keypoint_search_prior;
+    matrix_tracker.getKeypointSearchPrior( keypoint_search_prior );
+    glColor4f( 0, 0, 1, 1 );
+    for ( int i=0; i<keypoint_search_prior.size(); ++i)
+    {
+        const ofxVec2f& point = keypoint_search_prior[i];
+        glVertex2f(point.x, point.y);
+        /*if ( i%4 == 0 )
+            printf("\n ");
+        printf("%6.2f,%6.2f ", kp.u, kp.v );*/
+    }
+
     //printf("\n");
     // draw matching points red
     /*if ( detector.object_is_detected )
@@ -979,7 +996,7 @@ static void geomCalibStart(bool cache)
 
 
 
-static void drawAugmentation()
+static void drawAugmentation( keypoint* keypoints, int num_keypoints )
 {
     // we know that im is not NULL already
     IplImage *im = multi->model.image;
@@ -1002,8 +1019,113 @@ static void drawAugmentation()
             world = cvCreateMat( 3, 4, CV_64FC1 );
 
             //printf(". now we want interpolated pose for %f\n", raw_frame_timestamp.ToSeconds() );
-            ofxVec3f prev_object_space_delta;
-            matrix_tracker.getInterpolatedPose( world, raw_frame_timestamp, prev_object_space_delta );
+            ofxVec3f translation_estimate_3d;
+            matrix_tracker.getInterpolatedPose( world, raw_frame_timestamp, translation_estimate_3d );
+
+            // ------ now refine
+            // -> project translation_estimate_3d into screen coords to get a translation estimate in 2d
+
+            // ------ get modelview, projection, viewport matrices
+            // fetch the pre-projection matrix from model.augm
+            CvMat* proj = multi->model.augm.GetPreProjectionMatrix(current_cam);
+            // multiply by the object-to-world matrix
+            CamCalibration::Mat3x4Mul( proj, world, proj );
+            double proj_arr[3][4];
+            for ( int i=0; i<3; i++ )
+                for ( int j=0; j<4; j++ )
+                   proj_arr[i][j] = cvmGet( proj, i, j );
+  /*          // dump the matrix
+            printf("found matrix: %8.4f %8.4f %8.4f %8.4f\n"
+                   "              %8.4f %8.4f %8.4f %8.4f\n"
+                   "              %8.4f %8.4f %8.4f %8.4f\n",
+                   proj[0][0], proj[0][1], proj[0][2], proj[0][3],
+                   proj[1][0], proj[1][1], proj[1][2], proj[1][3],
+                   proj[2][0], proj[2][1], proj[2][2], proj[2][3]
+                    );
+*/
+            // translate into OpenGL PROJECTION and MODELVIEW matrices
+            PerspectiveCamera c;
+            c.loadTdir( proj_arr, multi->cams[0]->detect_width, multi->cams[0]->detect_height );
+            /*c.flip();
+            c.setPlanes(100,1000000); // near/far clip planes*/
+            cvReleaseMat(&proj);
+
+            // -------- use -translation_estimate_3d as an initial translation estimate:
+            //  get world position -> pos3d
+        /*    for ( int i=0; i<3; i++ )
+                for ( int j=0; j<4; j++ )
+                    cvmSet( matrix, i, j, interpolated_pose( i, j ) );*/
+            ofxVec3f estimated_world_pos(cvmGet( world,0,3 ),
+                                         cvmGet( world,1,3 ),
+                                         cvmGet( world,2,3 ));
+            //  add -translation_estimate_3d -> prevpos3d
+            ofxVec3f prev_world_pos_3d = estimated_world_pos - translation_estimate_3d;
+
+            // --------- project to 2d
+            //  project pos3d->pos2d and prevpos3d->prevpos2d in screen coords
+            double pos3d[3] = { estimated_world_pos.x, estimated_world_pos.y, estimated_world_pos.z };
+            double prevpos3d[3] = { prev_world_pos_3d.x, prev_world_pos_3d.y, prev_world_pos_3d.z };
+            double pos2d[3], prevpos2d[3];
+            c.worldToImage( pos3d, pos2d );
+            c.worldToImage( prevpos3d, prevpos2d );
+
+            // translation_estimate_2d is then pos2d-prevpos2d
+            ofxVec2f translation_estimate_2d( pos2d[0]-prevpos2d[0], pos2d[1]-prevpos2d[1] );
+            /*printf("translation estimate is 2d %3.2f,%3.2f, from 3d of %3.2f,%3.2f,%3.2f\n",
+                   translation_estimate_2d.x, translation_estimate_2d.y,
+                   translation_estimate_3d.x, translation_estimate_3d.y, translation_estimate_3d.z );*/
+            ofxVec2f refined_translation_2d;
+
+            float refinement_score=0;
+            bool refined= matrix_tracker.refinePoseUsingKeypoints( translation_estimate_2d,
+                                                                    keypoints, num_keypoints,
+                                                                    raw_frame_timestamp, refined_translation_2d,
+                                                                    refinement_score );
+            printf("refined, score is %f\n", refinement_score );
+            if ( !refined || refinement_score > SCORE_THRESH_ACCEPT )
+            {
+                /*printf("refine pose failed\n");
+                printf(" -> world pos held at initial estimate of %3.2f,%3.2f,%3.2f\n",
+                       estimated_world_pos.x, estimated_world_pos.y, estimated_world_pos.z );*/
+
+            }
+            else
+            {
+                ofxVec2f refined_pos2d(prevpos2d[0]+refined_translation_2d.x,
+                                       prevpos2d[1]+refined_translation_2d.y );
+
+                // unproject 2d translation to get refined_world_pos
+                Vec3 refined_world_pos_3d;
+                //  use z from pos3d
+                c.imageToWorld( refined_pos2d.x, refined_pos2d.y, refined_world_pos_3d, pos2d[2] );
+
+                ofxVec3f refined_translation_3d(refined_world_pos_3d[0]-prev_world_pos_3d.x,
+                                                refined_world_pos_3d[1]-prev_world_pos_3d.y,
+                                                refined_world_pos_3d[2]-prev_world_pos_3d.z );
+                /*printf("estimate refined to 2d %3.2f,%3.2f -> 3d %3.2f,%3.2f,%3.2f\n",
+                       refined_translation_2d.x, refined_translation_2d.y,
+                       refined_translation_3d.x, refined_translation_3d.y, refined_translation_3d.z );*/
+
+                // push on to world matrix
+                cvmSet( world, 0, 3, refined_world_pos_3d[0] );
+                cvmSet( world, 1, 3, refined_world_pos_3d[1] );
+                cvmSet( world, 2, 3, refined_world_pos_3d[2] );
+
+                /*printf(" -> world pos refined from %3.2f,%3.2f,%3.2f to %3.2f,%3.2f,%3.2f\n",
+                       estimated_world_pos.x, estimated_world_pos.y, estimated_world_pos.z,
+                       refined_world_pos_3d[0], refined_world_pos_3d[1], refined_world_pos_3d[2] );*/
+
+                if ( refinement_score < SCORE_THRESH_STORE )
+                {
+                    // update corner positions + store
+                    ofxVec2f corners[4];
+                    matrix_tracker.getKeypointSearchCorners( corners );
+                    for ( int i=0; i<4; i++ )
+                        corners[i] += refined_translation_2d;
+                    matrix_tracker.addPose( world, raw_frame_timestamp, keypoints, num_keypoints, corners );
+                }
+            }
+
         }
 
         // instead of this:
@@ -1346,7 +1468,7 @@ static void draw(void)
 
     if (frame_ok and augment == 1)
     {
-        drawAugmentation();
+        drawAugmentation( keypoints,num_keypoints );
     }
     else if (!frame_ok)
     {
@@ -1453,11 +1575,13 @@ static void* detectionThreadFunc( void* _data )
 
     while ( !detection_thread_should_exit )
     {
-        usleep( 200*1000 ); // sleep for 200 ms
+        usleep( 30*1000 ); // sleep for 30 ms
 
         PROFILE_SECTION_PUSH("detection_thread");
 
-        if ( !multi->cams[0]->detect() )
+        keypoint* keypoints;
+        int num_keypoints;
+        if ( !multi->cams[0]->detect( &keypoints, &num_keypoints ) )
         {
             PROFILE_SECTION_POP();
             continue;
@@ -1488,19 +1612,60 @@ static void* detectionThreadFunc( void* _data )
         if (frame_ok)
         {
             // fetch surface normal in world coordinates
-            CvMat *mat = multi->model.augm.GetObjectToWorld();
+            CvMat *world = multi->model.augm.GetObjectToWorld();
             float normal[3];
             for (int j=0; j<3; j++)
-                normal[j] = cvGet2D(mat, j, 2).val[0];
+                normal[j] = cvGet2D(world, j, 2).val[0];
 
             // continue to track
-            keypoint* last_keypoints = NULL;
-            int num_last_keypoints = 0;
-            ofxVec2f* last_corners = NULL;
-            matrix_tracker.addPose( mat, multi->cams[0]->getLastProcessedFrameTimestamp(),
-                                    last_keypoints, num_last_keypoints, last_corners );
 
-            cvReleaseMat(&mat);
+/*
+
+            // fetch the pre-projection matrix from model.augm
+            CvMat* proj = multi->model.augm.GetPreProjectionMatrix(current_cam);
+            // multiply by the object-to-world matrix
+            CamCalibration::Mat3x4Mul( proj, world, proj );
+
+
+            // dump the matrix
+
+            printf("found matrix: %8.4f %8.4f %8.4f %8.4f\n"
+                   "              %8.4f %8.4f %8.4f %8.4f\n"
+                   "              %8.4f %8.4f %8.4f %8.4f\n",
+                   proj[0][0], proj[0][1], proj[0][2], proj[0][3],
+                   proj[1][0], proj[1][1], proj[1][2], proj[1][3],
+                   proj[2][0], proj[2][1], proj[2][2], proj[2][3]
+                    );
+
+
+            CamCalibration::Mat3x4Mul( world, &cvMoveObject, &movedRT);
+            // translate into OpenGL PROJECTION and MODELVIEW matrices
+            PerspectiveCamera c;
+            c.loadTdir( proj, multi->cams[0]->detect_width, multi->cams[0]->detect_height );
+            c.flip();
+            c.setPlanes(100,1000000); // near/far clip planes
+            cvReleaseMat(&proj);
+
+            // must set the model view after drawing the background.
+            //c.setGlProjection();
+            //c.setGlModelView();
+*/
+
+            // fetch screen corner coordinates
+            ofxVec2f last_corners[4];
+            last_corners[0].x = cvRound(multi->cams[0]->detector.detected_u_corner1);
+            last_corners[0].y = cvRound(multi->cams[0]->detector.detected_v_corner1);
+            last_corners[1].x = cvRound(multi->cams[0]->detector.detected_u_corner2);
+            last_corners[1].y = cvRound(multi->cams[0]->detector.detected_v_corner2);
+            last_corners[2].x = cvRound(multi->cams[0]->detector.detected_u_corner3);
+            last_corners[2].y = cvRound(multi->cams[0]->detector.detected_v_corner3);
+            last_corners[3].x = cvRound(multi->cams[0]->detector.detected_u_corner4);
+            last_corners[3].y = cvRound(multi->cams[0]->detector.detected_v_corner4);
+
+            matrix_tracker.addPose( world, multi->cams[0]->getLastProcessedFrameTimestamp(),
+                                    keypoints, num_keypoints, last_corners );
+
+            cvReleaseMat(&world);
 
         }
 

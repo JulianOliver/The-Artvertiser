@@ -32,25 +32,6 @@ void FThread::StartThread( int thread_priority )
         printf("attempting to set thread priority to %i\n" ,thread_priority );
         struct sched_param param;
         param.sched_priority = thread_priority;
-        /*int res = pthread_attr_setschedpolicy( &thread_attr, SCHED_RR );
-        if ( res != 0 )
-        {
-            printf("pthread_attr_setschedpolicy failed: %s\n",
-                   (res == ENOSYS) ? "ENOSYS" :
-                   (res == EINVAL) ? "EINVAL" :
-                   (res == ENOTSUP) ? "ENOTSUP" :
-                   "???"
-                   );
-        }
-        res = pthread_attr_setschedparam( &thread_attr, &param );
-        if ( res != 0 )
-        {
-            printf("pthread_attr_setschedparam failed: %s\n",
-                   (res == EINVAL) ? "EINVAL" :
-                   (res == ENOTSUP) ? "ENOTSUP" :
-                   "???"
-                   );
-        }*/
         int res = pthread_setschedparam( the_thread, SCHED_RR, &param );
         if ( res != 0 )
         {
