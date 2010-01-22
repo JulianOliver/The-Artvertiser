@@ -780,6 +780,8 @@ static void drawDetectedPoints( int width, int height, keypoint* keypoints, int 
     glBegin(GL_POINTS);
     // draw all detected points
     glColor4f(0,1,0,1);
+
+    //printf("drawing %i keypoints:", num_keypoints);
     for ( int i=0; i<num_keypoints; ++i)
     {
         keypoint& kp = keypoints[i];
@@ -787,7 +789,11 @@ static void drawDetectedPoints( int width, int height, keypoint* keypoints, int 
         float x =PyrImage::convCoordf(kp.u, s, 0);
         float y =PyrImage::convCoordf(kp.v, s, 0);
         glVertex2f(x,y);
+        /*if ( i%4 == 0 )
+            printf("\n ");
+        printf("%6.2f,%6.2f ", kp.u, kp.v );*/
     }
+    //printf("\n");
     // draw matching points red
     /*if ( detector.object_is_detected )
     {
@@ -996,7 +1002,8 @@ static void drawAugmentation()
             world = cvCreateMat( 3, 4, CV_64FC1 );
 
             //printf(". now we want interpolated pose for %f\n", raw_frame_timestamp.ToSeconds() );
-            matrix_tracker.getInterpolatedPose( world, raw_frame_timestamp );
+            ofxVec3f prev_object_space_delta;
+            matrix_tracker.getInterpolatedPose( world, raw_frame_timestamp, prev_object_space_delta );
         }
 
         // instead of this:
@@ -1175,21 +1182,35 @@ static void drawAugmentation()
         glColor4f(1.0, 1.0, 1.0, fade);
 
         glBegin(GL_QUADS);
-        glTexCoord2f(0, 0);
+        /*glTexCoord2f(0, 0);
         glVertex3f(roi_vec[0], roi_vec[1], 0);
         glTexCoord2f(1, 0);
         glVertex3f(roi_vec[2], roi_vec[3], 0);
         glTexCoord2f(1, 1);
         glVertex3f(roi_vec[4], roi_vec[5], 0);
         glTexCoord2f(0, 1);
-        glVertex3f(roi_vec[6], roi_vec[7], 0);
+        glVertex3f(roi_vec[6], roi_vec[7], 0);*/
+        glTexCoord2f(0, 0);
+        glVertex3f(0,0, 0);
+        glTexCoord2f(1, 0);
+        glVertex3f(640,0, 0);
+        glTexCoord2f(1, 1);
+        glVertex3f(640,480, 0);
+        glTexCoord2f(0, 1);
+        glVertex3f(0, 480, 0);
         glEnd();
 
         glDisable(GL_TEXTURE_2D);
 
+        /*printf("roi_vec: ");
+        for ( int i=0; i<4; i++ )
+            printf("%3i,%3i ", roi_vec[2*i], roi_vec[2*i+1]);
+        prntf("\n");*/
+
         /*! 'label' is a boolean set by the right mouse button and toggles the
          * in-scene artvert label.
          */
+
 
         if (label)
         {
@@ -1432,7 +1453,7 @@ static void* detectionThreadFunc( void* _data )
 
     while ( !detection_thread_should_exit )
     {
-        usleep( 100*1000 );
+        usleep( 200*1000 ); // sleep for 200 ms
 
         PROFILE_SECTION_PUSH("detection_thread");
 
@@ -1450,6 +1471,7 @@ static void* detectionThreadFunc( void* _data )
 
         frame_ok=false;
 
+        PROFILE_SECTION_PUSH("homography")
         multi->model.augm.Clear();
         if (multi->cams[0]->detector.object_is_detected)
         {
@@ -1461,6 +1483,7 @@ static void* detectionThreadFunc( void* _data )
         }
 
         frame_ok = multi->model.augm.Accomodate(4, 1e-4);
+        PROFILE_SECTION_POP();
 
         if (frame_ok)
         {
@@ -1471,7 +1494,11 @@ static void* detectionThreadFunc( void* _data )
                 normal[j] = cvGet2D(mat, j, 2).val[0];
 
             // continue to track
-            matrix_tracker.addPose( mat, multi->cams[0]->getLastProcessedFrameTimestamp() );
+            keypoint* last_keypoints = NULL;
+            int num_last_keypoints = 0;
+            ofxVec2f* last_corners = NULL;
+            matrix_tracker.addPose( mat, multi->cams[0]->getLastProcessedFrameTimestamp(),
+                                    last_keypoints, num_last_keypoints, last_corners );
 
             cvReleaseMat(&mat);
 

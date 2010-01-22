@@ -36,6 +36,8 @@
 		<Unit filename="artvertiser/FProfiler/FThread.h" />
 		<Unit filename="artvertiser/FProfiler/FTime.cpp" />
 		<Unit filename="artvertiser/FProfiler/FTime.h" />
+		<Unit filename="artvertiser/MatrixTracker/KeypointNeighbourSearch.cpp" />
+		<Unit filename="artvertiser/MatrixTracker/KeypointNeighbourSearch.h" />
 		<Unit filename="artvertiser/MatrixTracker/MatrixTracker.cpp" />
 		<Unit filename="artvertiser/MatrixTracker/MatrixTracker.h" />
 		<Unit filename="artvertiser/MatrixTracker/ofxMatrix3x3.cpp" />

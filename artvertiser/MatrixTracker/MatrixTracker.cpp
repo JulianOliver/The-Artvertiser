@@ -1,5 +1,6 @@
 #include "MatrixTracker.h"
 
+
 #include "ofxMatrix4x4.h"
 
 #include <stdio.h>
@@ -7,7 +8,7 @@
 // prune
 static const int PRUNE_MAX_SIZE = 8;
 
-void MatrixTracker::addPose( CvMat* matrix, const FTime& timestamp )
+void MatrixTracker::addPose( CvMat* matrix, const FTime& timestamp, keypoint* keypoints, int num_keypoints, ofxVec2f* corners )
 {
     assert( matrix->width == 4 && matrix->height == 3 );
 
@@ -21,12 +22,13 @@ void MatrixTracker::addPose( CvMat* matrix, const FTime& timestamp )
 
     ofxVec3f trans( cvGet2D(matrix, 0/*y*/, 3/*x*/ ).val[0], cvGet2D(matrix, 1, 3 ).val[0], cvGet2D( matrix, 2, 3 ).val[0] );
 
-    addPose( rot, trans, timestamp );
+    addPose( rot, trans, timestamp, keypoints, num_keypoints, corners );
 
 }
 
 
-void MatrixTracker::addPose( const ofxMatrix4x4& rot, const ofxVec3f& new_translation, const FTime& timestamp )
+void MatrixTracker::addPose( const ofxMatrix4x4& rot, const ofxVec3f& new_translation, const FTime& timestamp,
+                            keypoint* keypoints, int num_keypoints, ofxVec2f* corners )
 {
   //  printf("adding pose for timestamp %f\n", timestamp.ToSeconds() );
 
@@ -46,8 +48,25 @@ void MatrixTracker::addPose( const ofxMatrix4x4& rot, const ofxVec3f& new_transl
         assert( found_poses.size() == PRUNE_MAX_SIZE );
     }
 
+    if ( num_keypoints > 0 )
+        keypoint_search.addPrior( keypoints, num_keypoints, corners, timestamp );
+
     unlock();
 
+}
+
+
+bool MatrixTracker::refinePoseUsingKeypoints( const ofxVec2f& translation_estimate_screen_space, keypoint* keypoints, int num_keypoints,
+                                              const FTime& timestamp, ofxVec2f& refined_translation_screen_space )
+{
+    // try to refine by shifting translation around
+    // using KeypointNeighbourSearch
+    bool result = keypoint_search.refine( translation_estimate_screen_space, keypoints, num_keypoints, timestamp, refined_translation_screen_space );
+
+    // store refined pose
+
+    // return
+    return result;
 }
 
 /*
@@ -75,10 +94,10 @@ void MatrixTracker::addPose( const ofxMatrix4x4& rot, const ofxVec3f& new_transl
 
 
 
-bool MatrixTracker::getInterpolatedPose( CvMat* matrix, const FTime& for_time )
+bool MatrixTracker::getInterpolatedPose( CvMat* matrix, const FTime& for_time, ofxVec3f& object_space_delta_since_last_stored )
 {
     ofxMatrix4x4 interpolated_pose;
-    bool res = getInterpolatedPose( interpolated_pose, for_time );
+    bool res = getInterpolatedPose( interpolated_pose, for_time, object_space_delta_since_last_stored );
     for ( int i=0; i<3; i++ )
         for ( int j=0; j<4; j++ )
             cvmSet( matrix, i, j, interpolated_pose( i, j ) );
@@ -86,7 +105,7 @@ bool MatrixTracker::getInterpolatedPose( CvMat* matrix, const FTime& for_time )
 }
 
 
-bool MatrixTracker::getInterpolatedPose( ofxMatrix4x4& interpolated_pose, const FTime& for_time )
+bool MatrixTracker::getInterpolatedPose( ofxMatrix4x4& interpolated_pose, const FTime& for_time, ofxVec3f& object_space_delta )
 {
 
     // so then
@@ -115,6 +134,8 @@ bool MatrixTracker::getInterpolatedPose( ofxMatrix4x4& interpolated_pose, const 
         // exactly on first
         //printf("exactly on prev\n");
         smoothAndMakeMatrix( (*prev_pose).second.rotation, (*prev_pose).second.translation, interpolated_pose );
+        ofxVec3f trans = extractTranslation( interpolated_pose );
+        object_space_delta = trans-(*prev_pose).second.translation;
         result = true;
     }
     else if ( next_pose == found_poses.end() )
@@ -195,6 +216,9 @@ bool MatrixTracker::getInterpolatedPose( ofxMatrix4x4& interpolated_pose, const 
             ofxQuaternion final_rot_quat( final_rot );
 
             smoothAndMakeMatrix( final_rot_quat, final_pos, interpolated_pose );
+            ofxVec3f trans = extractTranslation( interpolated_pose );
+            object_space_delta = trans-poses[LAST_FRAME_BACK]->translation;
+
         }
 
         result = !failed;
@@ -230,6 +254,8 @@ bool MatrixTracker::getInterpolatedPose( ofxMatrix4x4& interpolated_pose, const 
 
         // store in output
         smoothAndMakeMatrix( lerp_rot, lerp_trans, interpolated_pose );
+        ofxVec3f trans = extractTranslation( interpolated_pose );
+        object_space_delta = trans-prev_p.translation;
 
         result = true;
     }

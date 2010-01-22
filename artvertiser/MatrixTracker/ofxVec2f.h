@@ -1,10 +1,8 @@
 #ifndef _OFX_VEC2f
 #define _OFX_VEC2f
 
-#include "ofConstants.h"
-#include "ofTypes.h"
 
-
+#include "ofxVec3f.h"
 
 class ofxVec2f : public ofPoint {
 
@@ -75,14 +73,14 @@ class ofxVec2f : public ofPoint {
     ofxVec2f& rotate( float angle );
     ofxVec2f& rotateRad( float angle );
 
-    
+
     // Rotation - point around pivot
     //
     ofxVec2f  getRotated( float angle, const ofPoint& pivot ) const;
     ofxVec2f& rotate( float angle, const ofPoint& pivot );
     ofxVec2f  getRotatedRad( float angle, const ofPoint& pivot ) const;
     ofxVec2f& rotateRad( float angle, const ofPoint& pivot );
-        
+
 
     // Map point to coordinate system defined by origin, vx, and vy.
     //
@@ -111,8 +109,8 @@ class ofxVec2f : public ofPoint {
     ofxVec2f   getMiddle( const ofPoint& pnt ) const;
     ofxVec2f&  middle( const ofPoint& pnt );
     ofxVec2f&  average( const ofPoint* points, int num );
-    
-    
+
+
     // Normalization
     //
     ofxVec2f  getNormalized() const;
@@ -178,18 +176,18 @@ class ofxVec2f : public ofPoint {
 
     // getInterpolated
     ofxVec2f interpolated( const ofPoint& pnt, float p ) const;
-    
+
     // getMiddled
     ofxVec2f middled( const ofPoint& pnt ) const;
-    
-    // getMapped 
+
+    // getMapped
     ofxVec2f mapped( const ofPoint& origin, const ofxVec2f& vx, const ofxVec2f& vy ) const;
-    
+
     // squareDistance
     float distanceSquared( const ofPoint& pnt ) const;
-    
+
     // use getRotated
-    ofxVec2f rotated( float angle, const ofPoint& pivot ) const;    
+    ofxVec2f rotated( float angle, const ofPoint& pivot ) const;
 };
 
 

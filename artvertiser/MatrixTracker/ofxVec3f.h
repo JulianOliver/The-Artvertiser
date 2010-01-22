@@ -3,8 +3,12 @@
 
 #include <stdlib.h>
 #include <math.h>
-#define DEG_TO_RAD (M_PI/180.0)
-#define RAD_TO_DEG (180.0/M_PI)
+#ifndef DEG_TO_RAD
+#define DEG_TO_RAD ( M_PI/180.0f )
+#endif
+#ifndef RAD_TO_DEG
+#define RAD_TO_DEG ( 180.0f/M_PI )
+#endif
 //----------------------------------------------------------
 // ofPoint
 //----------------------------------------------------------
@@ -186,7 +190,7 @@ class ofxVec3f : public ofPoint {
     ofxVec3f( float _x=0.0f,
               float _y=0.0f,
               float _z=0.0f );
-              
+
     ofxVec3f( const ofPoint& pnt );
 
 
@@ -240,7 +244,7 @@ class ofxVec3f : public ofPoint {
     //
     ofxVec3f  getScaled( const float length ) const;
     ofxVec3f& scale( const float length );
-    
+
 
     // Rotation
     //
@@ -252,14 +256,14 @@ class ofxVec3f : public ofPoint {
     ofxVec3f  getRotatedRad(float ax, float ay, float az) const;
     ofxVec3f& rotate(float ax, float ay, float az);
     ofxVec3f& rotateRad(float ax, float ay, float az);
-    
-    
+
+
     // Rotation - point around pivot
-    //    
+    //
     ofxVec3f   getRotated( float angle, const ofPoint& pivot, const ofxVec3f& axis ) const;
     ofxVec3f&  rotate( float angle, const ofPoint& pivot, const ofxVec3f& axis );
     ofxVec3f   getRotatedRad( float angle, const ofPoint& pivot, const ofxVec3f& axis ) const;
-    ofxVec3f&  rotateRad( float angle, const ofPoint& pivot, const ofxVec3f& axis );    
+    ofxVec3f&  rotateRad( float angle, const ofPoint& pivot, const ofxVec3f& axis );
 
 
     // Map point to coordinate system defined by origin, vx, vy, and vz.
@@ -291,7 +295,7 @@ class ofxVec3f : public ofPoint {
     ofxVec3f   getMiddle( const ofPoint& pnt ) const;
     ofxVec3f&  middle( const ofPoint& pnt );
     ofxVec3f&  average( const ofPoint* points, int num );
-    
+
 
     // Normalization
     //
@@ -364,7 +368,7 @@ class ofxVec3f : public ofPoint {
 
     // squareLength
     float lengthSquared() const;
-    
+
     // use getMapped
     ofxVec3f  mapped( const ofPoint& origin,
                       const ofxVec3f& vx,
@@ -379,11 +383,11 @@ class ofxVec3f : public ofPoint {
 
     // use getMiddle
     ofxVec3f 	middled( const ofPoint& pnt ) const;
-    
+
     // use getRotated
     ofxVec3f 	rotated( float angle,
                          const ofPoint& pivot,
-                         const ofxVec3f& axis ) const;    
+                         const ofxVec3f& axis ) const;
 };
 
 
@@ -1078,7 +1082,7 @@ inline ofxVec3f ofxVec3f::getLimited(float max) const {
     }
     return limited;
 }
- 
+
 inline ofxVec3f& ofxVec3f::limit(float max) {
     float lengthSquared = (x*x + y*y + z*z);
     if( lengthSquared > max*max && lengthSquared > 0 ) {
