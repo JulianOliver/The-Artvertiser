@@ -535,14 +535,19 @@ bool planar_object_recognizer::detect(IplImage * input_image )
     assert( false && "we don't do this any more" );
 }
 
-bool planar_object_recognizer::detect( IplImage* input_image, keypoint* _keypoints, int _num_keypoints, object_view* object_input_view )
+bool planar_object_recognizer::detect( IplImage* input_image,
+                                      keypoint* _keypoints, int _num_keypoints,
+                                      pyr_yape** _point_detector, object_view** _object_input_view )
 {
     get_ui_settings();
+
+    (*_point_detector)->set_tau( point_detector_tau );
+    object_view* object_input_view = *_object_input_view;
 
     detected_points = _keypoints;
     detected_point_number = _num_keypoints;
 
-    check_target_size(input_image);
+    check_target_size(input_image, _point_detector, _object_input_view );
 
     /*PROFILE_SECTION_PUSH("detect points");
     detect_points(input_image);
@@ -1877,7 +1882,9 @@ void planar_object_recognizer::draw_inlier_matches(int line_width)
 /*! Ensures that allocated resources are ready to handle an image of the given
  * size.
  */
-void planar_object_recognizer::check_target_size(IplImage *image /*, pyr_yape** point_detector_ptr*/)
+void planar_object_recognizer::check_target_size(IplImage *image ,
+                                                 pyr_yape** point_detector_ptr,
+                                                 object_view** object_input_view )
 {
 	int w = image->width;
 	int h = image->height;
@@ -1897,8 +1904,6 @@ void planar_object_recognizer::check_target_size(IplImage *image /*, pyr_yape** 
         // Nothing to do: allocated resources have the right size
         return;
 
-    assert( false && "sizes don't match");
-    /*
 	fprintf(stderr,"*** PERFORMANCE WARNING: check_target_size is reallocated objects\n");
 
 	if (new_images_generator.orientation_corrector != 0)
@@ -1906,12 +1911,13 @@ void planar_object_recognizer::check_target_size(IplImage *image /*, pyr_yape** 
 	new_images_generator.orientation_corrector = new keypoint_orientation_corrector(
 			w,h, new_images_generator.patch_size, nbLev);
 
-	delete object_input_view;
-	object_input_view = new object_view(w,h,nbLev);
+	delete *object_input_view;
+	*object_input_view = new object_view(w,h,nbLev);
+
 	int yape_radius = (*point_detector_ptr)->get_radius();
 	delete *point_detector_ptr;
 	*point_detector_ptr = new pyr_yape(w,h,nbLev);
-	(*point_detector_ptr)->set_radius(yape_radius);*/
+	(*point_detector_ptr)->set_radius(yape_radius);
 }
 
 void planar_object_recognizer::get_ui_settings()

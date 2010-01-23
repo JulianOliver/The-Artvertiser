@@ -147,7 +147,8 @@ public:
   - \c estimate_homographic_transformation_nonlinear_method
   */
   bool detect(IplImage * input_image );
-  bool detect( IplImage* input_image, keypoint* _keypoints, int _num_keypoints, object_view* object_input_view );
+  bool detect( IplImage* input_image, keypoint* _keypoints, int _num_keypoints,
+              pyr_yape** _point_detector, object_view** _object_input_view );
 
   //! set the maximum number of points we want to detect
   void set_max_detected_pts(int max);
@@ -318,7 +319,7 @@ public:
   int u_input_image, v_input_image; // up left corner of inputImage in modelInputImage
   //@}
 
-  void check_target_size(IplImage *image/*, pyr_yape** point_detector_ptr */);
+  void check_target_size(IplImage *image, pyr_yape** point_detector_ptr );
 
 private:
 

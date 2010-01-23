@@ -222,7 +222,7 @@ void MultiThreadCapture::ThreadedFunction()
     }
 
     // wait a bit
-    usleep( 100 );
+    usleep( 1000 );
 
 }
 
@@ -272,8 +272,8 @@ void MultiThreadCapture::processThreadedFunction( )
         // so just wait for the new frame semaphore
         if ( !capture_frame_lock.TryWait() )
         {
-
             //printf("capture frame lock not available: starting again\n");
+            usleep( 1000 );
             continue;
         }
 
@@ -368,6 +368,16 @@ void MultiThreadCapture::processThreadedFunction( )
                 //point_detector->set_tau(point_detector_tau);
 
                 feature_detector_lock.Wait();
+
+                if ( object_input_view_working != NULL &&
+                    (object_input_view_working->getWidth() != processed_working->width ||
+                     object_input_view_working->getHeight() != processed_working->height ||
+                     object_input_view_working->getNumPyramidLevels() != || num_pyramid_levels)
+                    )
+                {
+                    delete object_input_view_working;
+                    object_input_view_working = NULL;
+                }
                 if ( object_input_view_working == NULL )
                     object_input_view_working = new object_view(processed_working->width,
                                                         processed_working->height,

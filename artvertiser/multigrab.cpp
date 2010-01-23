@@ -187,7 +187,11 @@ bool MultiGrab::Cam::detect()
 	PROFILE_SECTION_PUSH( "detect" );
 	// run the detector
 	bool res = false;
-	if (detector.detect(gray, keypoints, num_keypoints, object_input_view )) {
+	detector.check_target_size( gray, mtc->getKeypointDetectorPtrPtr() );
+	mtc->releaseKeypointDetectorLock();
+	if (detector.detect(gray, keypoints, num_keypoints, ))
+
+	{
 	    PROFILE_SECTION_PUSH("light accumulator")
 		if (lc)
             lc->averageImage(frame, detector.H);
