@@ -30,6 +30,9 @@ public:
     /// with translation in the last column. Return false if a pose couldn't be calculated.
     bool getInterpolatedPose( CvMat* matrix, const FTime& for_time );
 
+    /// reset tracking
+    void reset();
+
     /// set kalman dt
     void setKalmanDt( float dt ) { kalman_dt = dt; }
     /// track using kalman. matrix is 3x4 with translation in last column.
@@ -77,6 +80,7 @@ private:
 
     // kalman
     void createKalman();
+    void resetKalman();
     bool hasMeasurementForTime( unsigned int frame_index );
     typedef map<unsigned int, Pose> PoseMapKalman;
     PoseMapKalman kalman_found_poses;

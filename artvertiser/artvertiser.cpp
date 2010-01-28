@@ -101,6 +101,7 @@ using namespace std;
 // we continue tracking for 1 second, then fade for 3
 static const float SECONDS_LOST_TRACK = 0.5f;
 static const float SECONDS_LOST_FADE = 1.0f;
+static const float SECONDS_LOST_RESET = 5.0f; // no track for 5s->reset
 static const float MAX_FADE_SHOW = 0.9f;
 static const float MAX_FADE_NORMAL = 1.0f;
 
@@ -890,7 +891,6 @@ static void drawDetectedPoints(void)
     }
     glEnd();
 
-    glutSwapBuffers();
 }
 
 
@@ -1425,6 +1425,8 @@ static void draw()
             else
                 fade = 0.0f;
         }
+        if ( elapsed_since_last_caught > SECONDS_LOST_RESET )
+            matrix_tracker.reset();
         //printf("frame_ok: fade %f, elapsed since last caught %f\n", fade, elapsed_since_last_caught );
     }
     //printf("frame %s, lost_count %f -> fade pct %4.2f, fade %4.2f\n", frame_ok?"y":"n", frame_lost_count, fade_pct, fade );

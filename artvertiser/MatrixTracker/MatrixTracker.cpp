@@ -298,7 +298,7 @@ void MatrixTracker::createKalman()
     for ( int i=3; i<7; i++ )
     {
         cvmSet( kalman->process_noise_cov,     i, i, 1e-3 );
-        cvmSet( kalman->measurement_noise_cov, i, i, 1e-1 );
+        cvmSet( kalman->measurement_noise_cov, i, i, 1e-2 );
     }
 
     // choose random initial state
@@ -308,8 +308,25 @@ void MatrixTracker::createKalman()
     kalman_rng.disttype = CV_RAND_NORMAL;*/
     cvRand( &kalman_rng, x_k );
     //cvRand( &kalman_rng, kalman->state_post );
+
+    resetKalman();
+
+}
+
+void MatrixTracker::reset()
+{
+    found_poses.clear();
+    returned_poses.clear();
+    resetKalman();
+}
+
+void MatrixTracker::resetKalman()
+{
+    if ( !kalman )
+        return;
     cvZero( x_k );
     cvZero( kalman->state_post );
+    // set one component of rotation quaternion to 1
     cvmSet( x_k, 7, 0, 1 );
     cvmSet( kalman->state_post, 7, 0, 1 );
 
